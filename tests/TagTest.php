@@ -1,6 +1,7 @@
 <?php
 
 use App\Shared\Utils\HashTools;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * タグAPI（Tag）のテスト
@@ -219,5 +220,53 @@ class TagTest extends DbTestCase
         (new Tag())->execAdd($this->siteKey);
 
         $this->assertSame(401, $this->response()[0]);
+    }
+
+    /*
+     * 権限（サイトの執筆者）
+     */
+
+    /**
+     * 書き込みの操作
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function writeOperationProvider(): array
+    {
+        return [
+            'POST' => ['execAdd'],
+            'PUT' => ['execUpdate'],
+            'DELETE' => ['execDelete'],
+        ];
+    }
+
+    #[DataProvider('writeOperationProvider')]
+    public function testWriteBySiteWriterSucceeds(string $method): void
+    {
+        $key = $this->createTag('変更前');
+        $this->joinSite($this->siteKey, $this->registerWriter('__phpunit_writer__'));
+        $this->loginAs('__phpunit_writer__');
+        Flight::request()->data->setData(['tag' => '変更後']);
+
+        (new AuthenticatedTag())->$method(...($method === 'execAdd' ? [$this->siteKey] : [$key]));
+
+        $expected = ['execAdd' => 201, 'execUpdate' => 200, 'execDelete' => 200];
+        $this->assertSame($expected[$method], $this->response()[0]);
+    }
+
+    #[DataProvider('writeOperationProvider')]
+    public function testWriteByOtherSiteWriterReturns403(string $method): void
+    {
+        $key = $this->createTag('変更前');
+        // 別のサイトの執筆者としてログイン
+        $this->joinSite($this->createSite('https://other.example.com'), $this->registerWriter('__phpunit_writer__'));
+        $this->loginAs('__phpunit_writer__');
+        Flight::request()->data->setData(['tag' => '変更後']);
+
+        (new AuthenticatedTag())->$method(...($method === 'execAdd' ? [$this->siteKey] : [$key]));
+
+        $this->assertSame(403, $this->response()[0]);
+        // 変更・削除されていない
+        $this->assertSame('変更前', TagModel::detail(HashTools::decodeSqid($key))['tag']);
     }
 }

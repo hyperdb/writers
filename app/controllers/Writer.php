@@ -37,6 +37,11 @@ class Writer extends Base implements BaseMethod
      */
     public function getList(): void
     {
+        // トークンがあれば認証する（管理者にはuser_idなどを返すため）
+        if ($this->authenticateIfToken() === null)
+        {
+            return;
+        }
         // クエリパラメータの取得（不正な値は補正済み）
         $paging = $this->getPagingParams();
         // 一覧の取得
@@ -47,7 +52,7 @@ class Writer extends Base implements BaseMethod
 
         // fetchAllの各行はCollectionなので配列に変換してからkeyを付与する
         $rows = array_map(
-            fn($row): array => $this->toResponseRow($row->getData()),
+            fn($row): array => $this->toWriterResponseRow($row->getData()),
             $list
         );
 
@@ -83,13 +88,18 @@ class Writer extends Base implements BaseMethod
      */
     public function getDetail(string $sqid_key): void
     {
+        // トークンがあれば認証する（管理者にはuser_idなどを返すため）
+        if ($this->authenticateIfToken() === null)
+        {
+            return;
+        }
         // 詳細の取得
         $writer = WriterModel::detail(HashTools::decodeSqid($sqid_key));
 
         if (count($writer) > 0)
         {
             $this->resultJson(
-                $this->toResponseRow($writer, $sqid_key),
+                $this->toWriterResponseRow($writer, $sqid_key),
                 200,
                 $this->route,
                 "取得できました"
@@ -120,6 +130,23 @@ class Writer extends Base implements BaseMethod
         {
             return;
         }
+        $id = HashTools::decodeSqid($sqid_key);
+        // 同じ値での更新は影響行数が0になるため、存在確認は事前に行う
+        if (count(WriterModel::detail($id)) === 0)
+        {
+            $this->resultJson(
+                [],
+                404,
+                $this->route,
+                "見つかりませんでした"
+            );
+            return;
+        }
+        // 管理者以外は本人のみ更新できる
+        if ($this->respondIfForbidden($this->isAdmin() || $id === $this->loginWriterId()))
+        {
+            return;
+        }
         // POSTデータ取得
         $nickname = $this->getBodyString("nickname", "");
 
@@ -128,29 +155,14 @@ class Writer extends Base implements BaseMethod
         {
             return;
         }
-        else
-        {
-            $id = HashTools::decodeSqid($sqid_key);
-            // 同じ値での更新は影響行数が0になるため、存在確認は事前に行う
-            if (count(WriterModel::detail($id)) === 0)
-            {
-                $this->resultJson(
-                    [],
-                    404,
-                    $this->route,
-                    "見つかりませんでした"
-                );
-                return;
-            }
-            WriterModel::update($id, $nickname);
+        WriterModel::update($id, $nickname);
 
-            $this->resultJson(
-                [],
-                200,
-                $this->route,
-                "更新できました"
-            );
-        }
+        $this->resultJson(
+            [],
+            200,
+            $this->route,
+            "更新できました"
+        );
     }
 
     /**
@@ -161,11 +173,12 @@ class Writer extends Base implements BaseMethod
      */
     public function execDelete(string $sqid_key): void
     {
-        // 認証できなければ中断（レスポンスは送信済み）
-        if (!$this->authenticate())
+        // 認証できない・管理者でなければ中断（レスポンスは送信済み）
+        if (!$this->authenticate() || $this->respondIfForbidden($this->isAdmin()))
         {
             return;
         }
+
         if (empty($sqid_key))
         {
             // 送信前に確認済みだが念のため入力されていなければBAD REQUEST
@@ -175,33 +188,32 @@ class Writer extends Base implements BaseMethod
                 $this->route,
                 "パラメーターが正しくありません"
             );
+            return;
         }
-        else
+
+        $id = HashTools::decodeSqid($sqid_key);
+        if (count(WriterModel::detail($id)) === 0)
         {
-            $id = HashTools::decodeSqid($sqid_key);
-            if (count(WriterModel::detail($id)) === 0)
-            {
-                $this->resultJson([], 404, $this->route, "見つかりませんでした");
-                return;
-            }
-            if (WriterModel::countRelated($id) > 0)
-            {
-                $this->resultJson(
-                    [],
-                    409,
-                    $this->route,
-                    "コンテンツまたはサイトに紐付いているため削除できません"
-                );
-                return;
-            }
-            WriterModel::delete($id);
+            $this->resultJson([], 404, $this->route, "見つかりませんでした");
+            return;
+        }
+        if (WriterModel::countRelated($id) > 0)
+        {
             $this->resultJson(
                 [],
-                200,
+                409,
                 $this->route,
-                "削除できました"
+                "コンテンツまたはサイトに紐付いているため削除できません"
             );
+            return;
         }
+        WriterModel::delete($id);
+        $this->resultJson(
+            [],
+            200,
+            $this->route,
+            "削除できました"
+        );
     }
 
     /**
@@ -211,8 +223,8 @@ class Writer extends Base implements BaseMethod
      */
     public function execAdd(): void
     {
-        // 認証できなければ中断（レスポンスは送信済み）
-        if (!$this->authenticate())
+        // 認証できない・管理者でなければ中断（レスポンスは送信済み）
+        if (!$this->authenticate() || $this->respondIfForbidden($this->isAdmin()))
         {
             return;
         }
@@ -224,36 +236,34 @@ class Writer extends Base implements BaseMethod
         {
             return;
         }
-        else
+
+        try
         {
-            try
-            {
-                $this->add($user_id, $nickname);
-            }
-            catch (PDOException $e)
-            {
-                // user_idのUNIQUE制約違反なら409、それ以外のDBエラーはそのまま上げる
-                if (!BaseModel::isDuplicateKey($e))
-                {
-                    throw $e;
-                }
-                $this->resultJson(
-                    [],
-                    409,
-                    $this->route,
-                    "このユーザーは既に執筆者として登録されています"
-                );
-                return;
-            }
-            $id = BaseModel::getInsertId();
-            $writer = WriterModel::detail(intval($id));
-            // 登録した執筆者情報を返す
-            $this->resultJson(
-                $this->toResponseRow($writer),
-                201,
-                $this->route,
-                "登録できました"
-            );
+            $this->add($user_id, $nickname);
         }
+        catch (PDOException $e)
+        {
+            // user_idのUNIQUE制約違反なら409、それ以外のDBエラーはそのまま上げる
+            if (!BaseModel::isDuplicateKey($e))
+            {
+                throw $e;
+            }
+            $this->resultJson(
+                [],
+                409,
+                $this->route,
+                "このユーザーは既に執筆者として登録されています"
+            );
+            return;
+        }
+        $id = BaseModel::getInsertId();
+        $writer = WriterModel::detail(intval($id));
+        // 登録した執筆者情報を返す
+        $this->resultJson(
+            $this->toWriterResponseRow($writer),
+            201,
+            $this->route,
+            "登録できました"
+        );
     }
 }

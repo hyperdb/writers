@@ -7,7 +7,6 @@ require_once __DIR__ . "/Base.php";
 require_once __DIR__ . "/SiteScopedMethod.php";
 require_once __DIR__ . "/../models/BaseModel.php";
 require_once __DIR__ . "/../models/ContentModel.php";
-require_once __DIR__ . "/../models/WriterModel.php";
 require_once __DIR__ . "/../models/TypeModel.php";
 require_once __DIR__ . "/../models/CategoryModel.php";
 require_once __DIR__ . "/../models/TagModel.php";
@@ -54,15 +53,15 @@ class Content extends Base implements SiteScopedMethod
 
     /**
      * サイトのコンテンツ一覧の取得
-     * トークンなしは公開中のみ、トークン付きは下書き・公開予約中も含める
+     * サイトの執筆者（管理者を含む）は下書き・公開予約中も含め、それ以外は公開中のみ
      *
      * @param string $site_key
      * @return void
      */
     public function getList(string $site_key): void
     {
-        $includeUnpublished = $this->canViewUnpublished();
-        if ($includeUnpublished === null)
+        $authenticated = $this->authenticateIfToken();
+        if ($authenticated === null)
         {
             return;
         }
@@ -72,6 +71,7 @@ class Content extends Base implements SiteScopedMethod
             $this->resultJson([], 404, $this->route, "サイトが見つかりませんでした");
             return;
         }
+        $includeUnpublished = $authenticated && $this->isSiteWriter($siteId);
 
         $filters = [];
         foreach (self::FILTERS as $param => $column)
@@ -101,19 +101,25 @@ class Content extends Base implements SiteScopedMethod
 
     /**
      * コンテンツ詳細の取得
-     * トークンなしで公開中でないものは404とする
+     * 公開中でないものは、サイトの執筆者（管理者を含む）以外には404とする
      *
      * @param string $sqid_key
      * @return void
      */
     public function getDetail(string $sqid_key): void
     {
-        $includeUnpublished = $this->canViewUnpublished();
-        if ($includeUnpublished === null)
+        $authenticated = $this->authenticateIfToken();
+        if ($authenticated === null)
         {
             return;
         }
-        $content = ContentModel::detail(HashTools::decodeSqid($sqid_key), $includeUnpublished);
+        $id = HashTools::decodeSqid($sqid_key);
+        // 下書きを見られるかは所属サイトで決まるため、まず下書きも含めて取得する
+        $content = ContentModel::detail($id, true);
+        if (count($content) > 0 && !($authenticated && $this->isSiteWriter(intval($content["site_id"]))))
+        {
+            $content = ContentModel::detail($id, false);
+        }
 
         if (count($content) === 0)
         {
@@ -142,19 +148,27 @@ class Content extends Base implements SiteScopedMethod
             $this->resultJson([], 404, $this->route, "サイトが見つかりませんでした");
             return;
         }
+        if ($this->respondIfForbidden($this->isSiteWriter($siteId)))
+        {
+            return;
+        }
         $input = $this->validateInput($siteId);
         if ($input === null)
         {
             return;
         }
 
-        $id = ContentModel::create($input["values"] + ["site_id" => $siteId], $input["tag_ids"]);
+        // 執筆者はトークンの持ち主とする
+        $id = ContentModel::create(
+            $input["values"] + ["site_id" => $siteId, "writer_id" => $this->loginWriterId()],
+            $input["tag_ids"]
+        );
         $content = ContentModel::detail($id, true);
         $this->resultJson($this->toResponseRows([$content])[0], 201, $this->route, "登録できました");
     }
 
     /**
-     * コンテンツの更新（所属サイトは変更しない）
+     * コンテンツの更新（所属サイトと執筆者は変更しない）
      *
      * @param string $sqid_key
      * @return void
@@ -172,6 +186,10 @@ class Content extends Base implements SiteScopedMethod
         if (count($current) === 0)
         {
             $this->resultJson([], 404, $this->route, "見つかりませんでした");
+            return;
+        }
+        if ($this->respondIfForbidden($this->canEdit($current)))
+        {
             return;
         }
         $input = $this->validateInput(intval($current["site_id"]));
@@ -199,9 +217,14 @@ class Content extends Base implements SiteScopedMethod
         }
 
         $id = HashTools::decodeSqid($sqid_key);
-        if (count(ContentModel::detail($id, true)) === 0)
+        $current = ContentModel::detail($id, true);
+        if (count($current) === 0)
         {
             $this->resultJson([], 404, $this->route, "見つかりませんでした");
+            return;
+        }
+        if ($this->respondIfForbidden($this->canEdit($current)))
+        {
             return;
         }
 
@@ -210,18 +233,20 @@ class Content extends Base implements SiteScopedMethod
     }
 
     /**
-     * 下書き・公開予約中のコンテンツも取得できるか判定する
-     * トークンがあれば認証し、失敗した場合は401 / 502を返す
+     * ログイン中のユーザーがコンテンツを更新・削除できるか
+     * 管理者は常に可、それ以外は本人のコンテンツで、かつサイトの執筆者である場合のみ
      *
-     * @return ?bool トークンなしはfalse、認証成功はtrue、認証失敗はnull（レスポンス送信済み）
+     * @param array $content
+     * @return boolean
      */
-    private function canViewUnpublished(): ?bool
+    private function canEdit(array $content): bool
     {
-        if ($this->bearer_token === "")
+        if ($this->isAdmin())
         {
-            return false;
+            return true;
         }
-        return $this->authenticate() ? true : null;
+        return intval($content["writer_id"]) === $this->loginWriterId()
+            && $this->isSiteWriter(intval($content["site_id"]));
     }
 
     /**
@@ -243,12 +268,7 @@ class Content extends Base implements SiteScopedMethod
             $errors["status"] = ["公開状態はdraftまたはpublishedで指定してください"];
         }
 
-        // 参照先のチェック（執筆者は必須、それ以外は空文字なら未定）
-        $writerId = $this->findReferenceId("writer", "執筆者", fn(int $id): bool => count(WriterModel::detail($id)) > 0, $errors);
-        if ($this->getBodyString("writer", "") === "")
-        {
-            $errors["writer"] = ["執筆者は必須項目です"];
-        }
+        // 参照先のチェック（空文字なら未定）
         $typeId = $this->findReferenceId("type", "タイプ", fn(int $id): bool => count(TypeModel::detail($id)) > 0, $errors);
         $categoryId = $this->findReferenceId(
             "category",
@@ -270,7 +290,6 @@ class Content extends Base implements SiteScopedMethod
                 "published_at" => $publishedAt === "" ? null : $publishedAt,
                 "type_id" => $typeId,
                 "category_id" => $categoryId,
-                "writer_id" => $writerId,
             ],
             "tag_ids" => $tagIds,
         ];

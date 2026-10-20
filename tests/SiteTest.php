@@ -235,4 +235,39 @@ class SiteTest extends DbTestCase
         $this->assertSame(401, $this->response()[0]);
         $this->assertSame([], BaseModel::fetchAll("SELECT id FROM sites WHERE url = ?", [self::URL]));
     }
+
+    /*
+     * 権限（管理者のみ）
+     */
+
+    /**
+     * 書き込みの操作
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function writeOperationProvider(): array
+    {
+        return [
+            'POST' => ['execAdd'],
+            'PUT' => ['execUpdate'],
+            'DELETE' => ['execDelete'],
+        ];
+    }
+
+    #[DataProvider('writeOperationProvider')]
+    public function testWriteByNonAdminReturns403(string $method): void
+    {
+        $key = $this->createSite('https://phpunit-before.example.com', '変更前');
+        // 一般の執筆者としてログイン
+        $this->registerWriter('__phpunit_writer__');
+        $this->loginAs('__phpunit_writer__');
+        Flight::request()->data->setData(['url' => self::URL, 'name' => '変更後']);
+
+        (new AuthenticatedSite())->$method(...($method === 'execAdd' ? [] : [$key]));
+
+        $this->assertSame(403, $this->response()[0]);
+        // 追加・変更・削除されていない
+        $this->assertSame([], BaseModel::fetchAll("SELECT id FROM sites WHERE url = ?", [self::URL]));
+        $this->assertSame('変更前', SiteModel::detail(HashTools::decodeSqid($key))['name']);
+    }
 }

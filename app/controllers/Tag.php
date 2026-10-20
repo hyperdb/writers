@@ -106,6 +106,10 @@ class Tag extends Base implements SiteScopedMethod
             $this->resultJson([], 404, $this->route, "サイトが見つかりませんでした");
             return;
         }
+        if ($this->respondIfForbidden($this->isSiteWriter($siteId)))
+        {
+            return;
+        }
         $name = $this->getBodyString("tag", "");
         if ($this->respondIfInvalid((new TagValidator($name))->valid()))
         {
@@ -146,17 +150,21 @@ class Tag extends Base implements SiteScopedMethod
         {
             return;
         }
-        $name = $this->getBodyString("tag", "");
-        if ($this->respondIfInvalid((new TagValidator($name))->valid()))
+        $id = HashTools::decodeSqid($sqid_key);
+        // 同じ値での更新は影響行数が0になるため、存在確認は事前に行う
+        $current = TagModel::detail($id);
+        if (count($current) === 0)
+        {
+            $this->resultJson([], 404, $this->route, "見つかりませんでした");
+            return;
+        }
+        if ($this->respondIfForbidden($this->isSiteWriter(intval($current["site_id"]))))
         {
             return;
         }
-
-        $id = HashTools::decodeSqid($sqid_key);
-        // 同じ値での更新は影響行数が0になるため、存在確認は事前に行う
-        if (count(TagModel::detail($id)) === 0)
+        $name = $this->getBodyString("tag", "");
+        if ($this->respondIfInvalid((new TagValidator($name))->valid()))
         {
-            $this->resultJson([], 404, $this->route, "見つかりませんでした");
             return;
         }
 
@@ -191,9 +199,14 @@ class Tag extends Base implements SiteScopedMethod
         }
 
         $id = HashTools::decodeSqid($sqid_key);
-        if (count(TagModel::detail($id)) === 0)
+        $current = TagModel::detail($id);
+        if (count($current) === 0)
         {
             $this->resultJson([], 404, $this->route, "見つかりませんでした");
+            return;
+        }
+        if ($this->respondIfForbidden($this->isSiteWriter(intval($current["site_id"]))))
+        {
             return;
         }
         if (TagModel::countRelated($id) > 0)

@@ -106,6 +106,10 @@ class Category extends Base implements SiteScopedMethod
             $this->resultJson([], 404, $this->route, "サイトが見つかりませんでした");
             return;
         }
+        if ($this->respondIfForbidden($this->isSiteWriter($siteId)))
+        {
+            return;
+        }
         $input = $this->validateInput($siteId);
         if ($input === null)
         {
@@ -154,6 +158,10 @@ class Category extends Base implements SiteScopedMethod
             $this->resultJson([], 404, $this->route, "見つかりませんでした");
             return;
         }
+        if ($this->respondIfForbidden($this->isSiteWriter(intval($current["site_id"]))))
+        {
+            return;
+        }
         $input = $this->validateInput(intval($current["site_id"]), $id);
         if ($input === null)
         {
@@ -191,9 +199,14 @@ class Category extends Base implements SiteScopedMethod
         }
 
         $id = HashTools::decodeSqid($sqid_key);
-        if (count(CategoryModel::detail($id)) === 0)
+        $current = CategoryModel::detail($id);
+        if (count($current) === 0)
         {
             $this->resultJson([], 404, $this->route, "見つかりませんでした");
+            return;
+        }
+        if ($this->respondIfForbidden($this->isSiteWriter(intval($current["site_id"]))))
+        {
             return;
         }
         if (CategoryModel::countRelated($id) > 0)

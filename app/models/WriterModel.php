@@ -24,6 +24,21 @@ class WriterModel
     }
 
     /**
+     * 指定したユーザーIDの執筆者を取得
+     *
+     * @param string $user_id commonsのユーザーID
+     * @return array 執筆者として登録されていなければ空配列
+     */
+    public static function findByUserId(string $user_id): array
+    {
+        $sql = "SELECT * FROM writers WHERE user_id = ?";
+        $row = BaseModel::fetchRow($sql, [
+            $user_id
+        ]);
+        return $row?->getData() ?? [];
+    }
+
+    /**
      * 執筆者一覧を取得
      * 
      * @param int $index (一行目の行番号: ページ番号✕ページあたり行数)

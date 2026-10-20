@@ -77,8 +77,8 @@ class Type extends Base implements BaseMethod
      */
     public function execAdd(): void
     {
-        // 認証できなければ中断（レスポンスは送信済み）
-        if (!$this->authenticate())
+        // 認証できない・管理者でなければ中断（レスポンスは送信済み）
+        if (!$this->authenticate() || $this->respondIfForbidden($this->isAdmin()))
         {
             return;
         }
@@ -112,8 +112,8 @@ class Type extends Base implements BaseMethod
      */
     public function execUpdate(string $sqid_key): void
     {
-        // 認証できなければ中断（レスポンスは送信済み）
-        if (!$this->authenticate())
+        // 認証できない・管理者でなければ中断（レスポンスは送信済み）
+        if (!$this->authenticate() || $this->respondIfForbidden($this->isAdmin()))
         {
             return;
         }
@@ -155,8 +155,8 @@ class Type extends Base implements BaseMethod
      */
     public function execDelete(string $sqid_key): void
     {
-        // 認証できなければ中断（レスポンスは送信済み）
-        if (!$this->authenticate())
+        // 認証できない・管理者でなければ中断（レスポンスは送信済み）
+        if (!$this->authenticate() || $this->respondIfForbidden($this->isAdmin()))
         {
             return;
         }

@@ -51,6 +51,7 @@ require_once './app/controllers/Type.php';
 require_once './app/controllers/Category.php';
 require_once './app/controllers/Tag.php';
 require_once './app/controllers/Content.php';
+require_once './app/controllers/SiteWriter.php';
 
 Flight::group('/api', function ()
 {
@@ -62,6 +63,7 @@ Flight::group('/api', function ()
         Category::registerRoutes();
         Tag::registerRoutes();
         Content::registerRoutes();
+        SiteWriter::registerRoutes();
     });
 });
 

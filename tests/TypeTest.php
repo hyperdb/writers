@@ -1,6 +1,7 @@
 <?php
 
 use App\Shared\Utils\HashTools;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * コンテンツタイプAPI（Type）のテスト
@@ -195,5 +196,40 @@ class TypeTest extends DbTestCase
         (new Type())->execAdd();
 
         $this->assertSame(401, $this->response()[0]);
+    }
+
+    /*
+     * 権限（管理者のみ）
+     */
+
+    /**
+     * 書き込みの操作
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function writeOperationProvider(): array
+    {
+        return [
+            'POST' => ['execAdd'],
+            'PUT' => ['execUpdate'],
+            'DELETE' => ['execDelete'],
+        ];
+    }
+
+    #[DataProvider('writeOperationProvider')]
+    public function testWriteByNonAdminReturns403(string $method): void
+    {
+        $key = $this->createType('__phpunit_before__');
+        // 一般の執筆者としてログイン
+        $this->registerWriter('__phpunit_writer__');
+        $this->loginAs('__phpunit_writer__');
+        Flight::request()->data->setData(['name' => self::NAME]);
+
+        (new AuthenticatedType())->$method(...($method === 'execAdd' ? [] : [$key]));
+
+        $this->assertSame(403, $this->response()[0]);
+        // 追加・変更・削除されていない
+        $this->assertSame('__phpunit_before__', TypeModel::detail(HashTools::decodeSqid($key))['name']);
+        $this->assertSame([], BaseModel::fetchAll("SELECT id FROM types WHERE name = ?", [self::NAME]));
     }
 }

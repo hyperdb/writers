@@ -9,6 +9,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
  */
 class ContentTest extends DbTestCase
 {
+    /** テストで執筆者としてログインするユーザーID */
+    private const WRITER_USER_ID = '__phpunit_writer__';
+
     /** テスト用データのID・key（setUpで登録） */
     private int $siteId;
     private string $siteKey;
@@ -24,8 +27,10 @@ class ContentTest extends DbTestCase
         $this->siteKey = $this->createSite();
         $this->siteId = HashTools::decodeSqid($this->siteKey);
 
-        WriterModel::add('__phpunit_writer__', 'テスト執筆者');
-        $this->writerKey = $this->lastKey();
+        // 既定ではサイトの執筆者としてログインする（管理者の操作は個別のテストで切り替える）
+        $this->writerKey = $this->registerWriter(self::WRITER_USER_ID);
+        $this->joinSite($this->siteKey, $this->writerKey);
+        $this->loginAs(self::WRITER_USER_ID);
         TypeModel::add('__phpunit_type__');
         $this->typeKey = $this->lastKey();
         CategoryModel::add($this->siteId, 0, 'テストカテゴリー');
@@ -83,7 +88,6 @@ class ContentTest extends DbTestCase
             'title' => 'テスト記事',
             'body' => '# 見出し',
             'status' => 'published',
-            'writer' => $this->writerKey,
         ];
     }
 
@@ -309,8 +313,6 @@ class ContentTest extends DbTestCase
             '公開状態が不正' => [['status' => 'private'], 'status'],
             '公開日時の形式が不正' => [['published_at' => '2026/01/01'], 'published_at'],
             '存在しない日付' => [['published_at' => '2026-02-30 00:00:00'], 'published_at'],
-            '執筆者未指定' => [['writer' => ''], 'writer'],
-            '執筆者が存在しない' => [['writer' => '!!'], 'writer'],
             'タイプが存在しない' => [['type' => '!!'], 'type'],
             'タグが配列でない' => [['tags' => 'タグ1'], 'tags'],
         ];
@@ -448,12 +450,146 @@ class ContentTest extends DbTestCase
     }
 
     /*
+     * 権限
+     */
+
+    public function testExecAddSetsLoginWriterIgnoringBody(): void
+    {
+        $otherKey = $this->registerWriter('__phpunit_other__', '別の執筆者');
+        Flight::request()->data->setData($this->validInput(['writer' => $otherKey]));
+
+        (new AuthenticatedContent())->execAdd($this->siteKey);
+        [$status, $body] = $this->response();
+
+        // ボディのwriterは無視し、トークンの持ち主が執筆者になる
+        $this->assertSame(201, $status);
+        $this->assertSame(HashTools::decodeSqid($this->writerKey), HashTools::decodeSqid($body['data']['writer_key']));
+    }
+
+    public function testExecAddByNonSiteWriterReturns403(): void
+    {
+        $this->registerWriter('__phpunit_other__', '別の執筆者');
+        $this->loginAs('__phpunit_other__');
+        Flight::request()->data->setData($this->validInput());
+
+        (new AuthenticatedContent())->execAdd($this->siteKey);
+
+        $this->assertSame(403, $this->response()[0]);
+    }
+
+    public function testExecAddByAdminWithoutSiteReturns201(): void
+    {
+        $this->loginAs(self::ADMIN_USER_ID);
+        Flight::request()->data->setData($this->validInput());
+
+        (new AuthenticatedContent())->execAdd($this->siteKey);
+        [$status, $body] = $this->response();
+
+        $this->assertSame(201, $status);
+        $this->assertSame(HashTools::decodeSqid($this->adminKey), HashTools::decodeSqid($body['data']['writer_key']));
+    }
+
+    /**
+     * 更新・削除の操作
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function editOperationProvider(): array
+    {
+        return [
+            'PUT' => ['execUpdate'],
+            'DELETE' => ['execDelete'],
+        ];
+    }
+
+    #[DataProvider('editOperationProvider')]
+    public function testEditOtherWritersContentReturns403(string $method): void
+    {
+        // 同じサイトの執筆者でも、他人のコンテンツは変更できない
+        $key = $this->createContent(['title' => '他人の記事']);
+        $otherKey = $this->registerWriter('__phpunit_other__', '別の執筆者');
+        $this->joinSite($this->siteKey, $otherKey);
+        $this->loginAs('__phpunit_other__');
+        Flight::request()->data->setData($this->validInput(['title' => '更新後']));
+
+        (new AuthenticatedContent())->$method($key);
+
+        $this->assertSame(403, $this->response()[0]);
+        $this->assertSame('他人の記事', ContentModel::detail(HashTools::decodeSqid($key), true)['title']);
+    }
+
+    #[DataProvider('editOperationProvider')]
+    public function testEditOwnContentAfterLeavingSiteReturns403(string $method): void
+    {
+        $key = $this->createContent();
+        SiteWriterModel::delete($this->siteId, HashTools::decodeSqid($this->writerKey));
+        Flight::request()->data->setData($this->validInput());
+
+        (new AuthenticatedContent())->$method($key);
+
+        $this->assertSame(403, $this->response()[0]);
+    }
+
+    public function testExecUpdateByAdminKeepsWriter(): void
+    {
+        $key = $this->createContent();
+        $this->loginAs(self::ADMIN_USER_ID);
+        Flight::request()->data->setData($this->validInput(['title' => '管理者が更新']));
+
+        (new AuthenticatedContent())->execUpdate($key);
+
+        $this->assertSame(200, $this->response()[0]);
+        $content = ContentModel::detail(HashTools::decodeSqid($key), true);
+        $this->assertSame('管理者が更新', $content['title']);
+        $this->assertSame(HashTools::decodeSqid($this->writerKey), intval($content['writer_id']));
+    }
+
+    public function testExecDeleteByAdminReturns200(): void
+    {
+        $key = $this->createContent();
+        $this->loginAs(self::ADMIN_USER_ID);
+
+        (new AuthenticatedContent())->execDelete($key);
+
+        $this->assertSame(200, $this->response()[0]);
+    }
+
+    public function testGetByNonSiteWriterReturnsOnlyPublished(): void
+    {
+        $this->createContent(['title' => '公開中']);
+        $draftKey = $this->createContent(['title' => '下書き', 'status' => 'draft', 'published_at' => null]);
+        // トークンは有効だが、このサイトの執筆者ではない
+        $this->registerWriter('__phpunit_other__', '別の執筆者');
+        $this->loginAs('__phpunit_other__');
+
+        (new AuthenticatedContent())->getList($this->siteKey);
+        [$listStatus, $list] = $this->response();
+        Flight::response()->clear();
+        (new AuthenticatedContent())->getDetail($draftKey);
+
+        $this->assertSame(200, $listStatus);
+        $this->assertSame(['公開中'], array_column($list['data'], 'title'));
+        $this->assertSame(404, $this->response()[0]);
+    }
+
+    public function testGetDraftByAdminReturns200(): void
+    {
+        $key = $this->createContent(['status' => 'draft', 'published_at' => null]);
+        $this->loginAs(self::ADMIN_USER_ID);
+
+        (new AuthenticatedContent())->getDetail($key);
+
+        $this->assertSame(200, $this->response()[0]);
+    }
+
+    /*
      * 執筆者の削除（コンテンツから参照されている場合）
      */
 
     public function testDeleteWriterReferencedByContentReturns409(): void
     {
         $this->createContent();
+        $this->loginAs(self::ADMIN_USER_ID);
 
         (new AuthenticatedWriter())->execDelete($this->writerKey);
 

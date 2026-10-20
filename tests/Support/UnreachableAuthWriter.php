@@ -5,7 +5,7 @@
  */
 class UnreachableAuthWriter extends Writer
 {
-    protected function validToken(string $shortenToken): ?bool
+    protected function validToken(string $shortenToken): ?string
     {
         return null;
     }

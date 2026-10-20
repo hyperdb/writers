@@ -1,13 +1,10 @@
 <?php
 
 /**
- * テスト用: 認証を常に成功させるTag
+ * テスト用: `FakeAuth::$userId`のユーザーとして認証するTag
  * commonsに問い合わせずに、認証後の処理をテストするために使う
  */
 class AuthenticatedTag extends Tag
 {
-    public function authenticate(): bool
-    {
-        return true;
-    }
+    use FakeAuthentication;
 }

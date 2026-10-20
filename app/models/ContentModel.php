@@ -146,11 +146,11 @@ class ContentModel
     }
 
     /**
-     * コンテンツ更新（タグの紐付けも置き換える。所属サイトは変更しない）
+     * コンテンツ更新（タグの紐付けも置き換える。所属サイトと執筆者は変更しない）
      * 公開で公開日時が未指定の場合は、既存の公開日時を維持（なければ現在日時）
      *
      * @param int $id
-     * @param array{title: string, body: string, status: string, published_at: ?string, type_id: int, category_id: int, writer_id: int} $values
+     * @param array{title: string, body: string, status: string, published_at: ?string, type_id: int, category_id: int} $values
      * @param array<int,int> $tagIds
      * @return void
      */
@@ -164,8 +164,7 @@ class ContentModel
                     status = ?,
                     published_at = IF(? = ?, COALESCE(?, published_at, NOW()), ?),
                     type_id = ?,
-                    category_id = ?,
-                    writer_id = ?
+                    category_id = ?
                     WHERE id = ?";
             BaseModel::query($sql, [
                 $values["title"],
@@ -177,7 +176,6 @@ class ContentModel
                 $values["published_at"],
                 $values["type_id"],
                 $values["category_id"],
-                $values["writer_id"],
                 $id,
             ]);
             self::replaceTags($id, $tagIds);

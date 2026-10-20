@@ -34,7 +34,8 @@ class WriterTest extends DbTestCase
         $this->createWriter();
         Flight::request()->query->setData(['rows' => '1000']);
 
-        (new Writer())->getList();
+        // 管理者にはuser_idも返す
+        (new AuthenticatedWriter())->getList();
         [$status, $body] = $this->response();
 
         $this->assertSame(200, $status);
@@ -65,13 +66,62 @@ class WriterTest extends DbTestCase
     {
         $key = $this->createWriter();
 
-        (new Writer())->getDetail($key);
+        // 管理者にはuser_idも返す
+        (new AuthenticatedWriter())->getDetail($key);
         [$status, $body] = $this->response();
 
         $this->assertSame(200, $status);
         $this->assertSame(self::USER_ID, $body['data']['user_id']);
+        $this->assertSame(0, $body['data']['is_admin']);
         $this->assertSame($key, $body['data']['key']);
         $this->assertArrayNotHasKey('id', $body['data']);
+    }
+
+    /**
+     * 管理者以外の取得（トークンなし・一般の執筆者・未登録ユーザー）
+     *
+     * @return array<string, array{0: bool, 1: string}>
+     */
+    public static function nonAdminReaderProvider(): array
+    {
+        return [
+            'トークンなし' => [false, ''],
+            '一般の執筆者' => [true, self::USER_ID],
+            '未登録ユーザー' => [true, '__phpunit_unregistered__'],
+        ];
+    }
+
+    #[DataProvider('nonAdminReaderProvider')]
+    public function testGetByNonAdminHidesUserIdAndIsAdmin(bool $withToken, string $userId): void
+    {
+        $key = $this->createWriter();
+        $this->loginAs($userId);
+        Flight::request()->query->setData(['rows' => '1000']);
+        $writer = fn(): Writer => $withToken ? new AuthenticatedWriter() : new Writer();
+
+        $writer()->getList();
+        [$listStatus, $list] = $this->response();
+        Flight::response()->clear();
+        $writer()->getDetail($key);
+        [$detailStatus, $detail] = $this->response();
+
+        $this->assertSame(200, $listStatus);
+        $this->assertSame(200, $detailStatus);
+        foreach ([...$list['data'], $detail['data']] as $row)
+        {
+            $this->assertArrayHasKey('nickname', $row);
+            $this->assertArrayNotHasKey('user_id', $row);
+            $this->assertArrayNotHasKey('is_admin', $row);
+        }
+    }
+
+    public function testGetWithInvalidTokenReturns401(): void
+    {
+        $this->loginAs('');
+
+        (new AuthenticatedWriter())->getList();
+
+        $this->assertSame(401, $this->response()[0]);
     }
 
     public function testGetDetailMissingKeyReturns404(): void
@@ -127,6 +177,16 @@ class WriterTest extends DbTestCase
         $this->assertArrayHasKey('nickname', $body['data']);
     }
 
+    public function testExecAddIgnoresIsAdmin(): void
+    {
+        Flight::request()->data->setData(['user_id' => self::USER_ID, 'nickname' => 'テスト', 'is_admin' => 1]);
+
+        (new AuthenticatedWriter())->execAdd();
+
+        $this->assertSame(201, $this->response()[0]);
+        $this->assertSame(0, WriterModel::findByUserId(self::USER_ID)['is_admin']);
+    }
+
     public function testExecAddDuplicateUserIdReturns409(): void
     {
         $this->createWriter();
@@ -169,6 +229,31 @@ class WriterTest extends DbTestCase
         (new AuthenticatedWriter())->execUpdate($key);
 
         $this->assertSame(400, $this->response()[0]);
+    }
+
+    public function testExecUpdateBySelfReturns200(): void
+    {
+        $key = $this->createWriter();
+        $this->loginAs(self::USER_ID);
+        Flight::request()->data->setData(['nickname' => '本人が更新']);
+
+        (new AuthenticatedWriter())->execUpdate($key);
+
+        $this->assertSame(200, $this->response()[0]);
+        $this->assertSame('本人が更新', WriterModel::detail(HashTools::decodeSqid($key))['nickname']);
+    }
+
+    public function testExecUpdateOtherWriterReturns403(): void
+    {
+        $this->createWriter();
+        $otherKey = $this->createWriter('__phpunit_other__', '別の執筆者');
+        $this->loginAs(self::USER_ID);
+        Flight::request()->data->setData(['nickname' => '更新後']);
+
+        (new AuthenticatedWriter())->execUpdate($otherKey);
+
+        $this->assertSame(403, $this->response()[0]);
+        $this->assertSame('別の執筆者', WriterModel::detail(HashTools::decodeSqid($otherKey))['nickname']);
     }
 
     public function testExecUpdateMissingKeyReturns404(): void
@@ -226,6 +311,46 @@ class WriterTest extends DbTestCase
         (new Writer())->$method(...$args);
 
         $this->assertSame(401, $this->response()[0]);
+    }
+
+    #[DataProvider('writeOperationProvider')]
+    public function testWriteByUnregisteredUserReturns403(string $method, array $args): void
+    {
+        // トークンは有効だが、執筆者として登録されていない
+        $this->loginAs('__phpunit_unregistered__');
+        $args = $args === [] ? [] : [$this->adminKey];
+        Flight::request()->data->setData(['user_id' => self::USER_ID, 'nickname' => 'テスト']);
+
+        (new AuthenticatedWriter())->$method(...$args);
+
+        $this->assertSame(403, $this->response()[0]);
+    }
+
+    /**
+     * 管理者のみの操作
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function adminOperationProvider(): array
+    {
+        return [
+            'POST' => ['execAdd'],
+            'DELETE' => ['execDelete'],
+        ];
+    }
+
+    #[DataProvider('adminOperationProvider')]
+    public function testAdminOperationByWriterReturns403(string $method): void
+    {
+        $key = $this->createWriter();
+        $this->loginAs(self::USER_ID);
+        Flight::request()->data->setData(['user_id' => '__phpunit_new__', 'nickname' => 'テスト']);
+
+        (new AuthenticatedWriter())->$method(...($method === 'execAdd' ? [] : [$key]));
+
+        $this->assertSame(403, $this->response()[0]);
+        $this->assertSame([], WriterModel::findByUserId('__phpunit_new__'));
+        $this->assertNotSame([], WriterModel::detail(HashTools::decodeSqid($key)));
     }
 
     #[DataProvider('writeOperationProvider')]

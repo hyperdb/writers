@@ -1,13 +1,10 @@
 <?php
 
 /**
- * テスト用: 認証を常に成功させるType
+ * テスト用: `FakeAuth::$userId`のユーザーとして認証するType
  * commonsに問い合わせずに、認証後の処理をテストするために使う
  */
 class AuthenticatedType extends Type
 {
-    public function authenticate(): bool
-    {
-        return true;
-    }
+    use FakeAuthentication;
 }
