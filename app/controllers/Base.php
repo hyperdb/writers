@@ -3,6 +3,8 @@
 use App\Shared\Utils\HashTools;
 
 require_once __DIR__ . "/../models/SiteModel.php";
+require_once __DIR__ . "/../models/WriterModel.php";
+require_once __DIR__ . "/../models/SiteWriterModel.php";
 
 /**
  * 基底クラス
@@ -18,6 +20,8 @@ class Base
 
     protected string $bearer_token;
     protected string $route;
+    /** ログイン中の執筆者（未認証・執筆者として未登録の場合は空配列） */
+    protected array $login_writer = [];
 
     /**
      * Undocumented function
@@ -176,39 +180,122 @@ class Base
     }
 
     /**
-     * Bearerトークンで認証する
+     * Bearerトークンで認証し、トークンの持ち主の執筆者を`$login_writer`に保持する
      * 無効な場合は401、commonsに問い合わせできない場合は502を返す
      *
      * @return boolean 認証できなければfalse（呼び出し元は処理を中断すること）
      */
     public function authenticate(): bool
     {
-        $valid = $this->validToken($this->bearer_token);
-        if ($valid === null)
+        $userId = $this->validToken($this->bearer_token);
+        if ($userId === null)
         {
             $this->resultJson([], 502, $this->route, "認証サーバーに接続できませんでした");
             return false;
         }
-        if ($valid === false)
+        if ($userId === "")
         {
             $this->resultJson([], 401, $this->route, "認証できませんでした");
             return false;
         }
+        $this->login_writer = WriterModel::findByUserId($userId);
         return true;
+    }
+
+    /**
+     * トークンが添付されていれば認証する（トークンが任意のGET用）
+     *
+     * @return ?bool トークンなしはfalse、認証成功はtrue、認証失敗はnull（レスポンス送信済み）
+     */
+    protected function authenticateIfToken(): ?bool
+    {
+        if ($this->bearer_token === "")
+        {
+            return false;
+        }
+        return $this->authenticate() ? true : null;
+    }
+
+    /**
+     * ログイン中のユーザーが管理者か
+     *
+     * @return boolean
+     */
+    protected function isAdmin(): bool
+    {
+        return intval($this->login_writer["is_admin"] ?? 0) === 1;
+    }
+
+    /**
+     * ログイン中のユーザーの執筆者ID
+     *
+     * @return integer 執筆者として未登録の場合は0
+     */
+    protected function loginWriterId(): int
+    {
+        return intval($this->login_writer["id"] ?? 0);
+    }
+
+    /**
+     * ログイン中のユーザーがサイトの執筆者か（管理者は常にtrue）
+     *
+     * @param int $siteId
+     * @return boolean
+     */
+    protected function isSiteWriter(int $siteId): bool
+    {
+        if ($this->isAdmin())
+        {
+            return true;
+        }
+        $writerId = $this->loginWriterId();
+        return $writerId > 0 && SiteWriterModel::exists($siteId, $writerId);
+    }
+
+    /**
+     * 権限がなければ403を返す
+     *
+     * @param bool $allowed 権限があるか
+     * @return boolean 403を返した場合はtrue（呼び出し元は処理を中断すること）
+     */
+    protected function respondIfForbidden(bool $allowed): bool
+    {
+        if ($allowed)
+        {
+            return false;
+        }
+        $this->resultJson([], 403, $this->route, "この操作を行う権限がありません");
+        return true;
+    }
+
+    /**
+     * 執筆者をレスポンス用の行に変換する（user_idとis_adminは管理者にのみ返す）
+     *
+     * @param array $row
+     * @param ?string $key
+     * @return array
+     */
+    protected function toWriterResponseRow(array $row, ?string $key = null): array
+    {
+        if (!$this->isAdmin())
+        {
+            unset($row["user_id"], $row["is_admin"]);
+        }
+        return $this->toResponseRow($row, $key);
     }
 
     /**
      * トークンの有効性をcommons APIに問い合わせる
      *
      * @param string $shortenToken
-     * @return ?bool 有効ならtrue、無効ならfalse、問い合わせできなければnull
+     * @return ?string 有効ならトークンの持ち主のユーザーID、無効なら空文字、問い合わせできなければnull
      */
-    protected function validToken(string $shortenToken): ?bool
+    protected function validToken(string $shortenToken): ?string
     {
         // 短縮トークンの形式（Base64URL・22文字）でなければ問い合わせずに無効とする
         if (!preg_match('/^[A-Za-z0-9_-]{22}$/', $shortenToken))
         {
-            return false;
+            return "";
         }
 
         $ch = curl_init(self::TOKEN_VALID_URL);
@@ -236,17 +323,23 @@ class Base
             return null;
         }
 
-        // 判定結果は`data.valid`に"OK"（有効）か"NG"（無効）で返る
+        // 判定結果は`data.valid`に"OK"（有効）か"NG"（無効）、有効なら`data.user_id`に持ち主が返る
         $result = json_decode($response, true);
-        $valid = is_array($result) ? ($result['data']['valid'] ?? null) : null;
-        if ($valid !== "OK" && $valid !== "NG")
+        $data = is_array($result) && is_array($result['data'] ?? null) ? $result['data'] : [];
+        $valid = $data['valid'] ?? null;
+        $userId = $data['user_id'] ?? null;
+        if ($valid === "NG")
+        {
+            return "";
+        }
+        if ($valid !== "OK" || !is_string($userId) || $userId === "")
         {
             Flight::logger()->error("トークン判定APIの応答が想定外の形式です", [
                 "response" => mb_substr(strval($response), 0, 200),
             ]);
             return null;
         }
-        return $valid === "OK";
+        return $userId;
     }
 
     /**
