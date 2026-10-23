@@ -36,7 +36,8 @@ class HashTools
             {
                 throw new \RuntimeException("MY_ALPHABET is not set in .env");
             }
-            self::$sqids = new Sqids($alphabet);
+            // 最小の長さを揃える
+            self::$sqids = new Sqids($alphabet, 8);
         }
         return self::$sqids;
     }
@@ -133,16 +134,7 @@ class HashTools
     {
         $sqids = self::sqids();
 
-        /**
-         * [id, dummy, ....]の形にして生成する
-         */
         $container = [$id];
-        $count = rand(2, 4);
-        while ($count > 0)
-        {
-            $container[] = rand(1, $id * 2);
-            $count -= 1;
-        }
         return $sqids->encode($container);
     }
 
