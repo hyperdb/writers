@@ -139,6 +139,59 @@ class WriterTest extends DbTestCase
     }
 
     /*
+     * GET /writers/me
+     */
+
+    public function testGetMeReturnsLoginWriterWithUserId(): void
+    {
+        // 管理者以外でも本人の情報なのでuser_idとis_adminを返す
+        $key = $this->createWriter();
+        $this->loginAs(self::USER_ID);
+
+        (new AuthenticatedWriter())->getMe();
+        [$status, $body] = $this->response();
+
+        $this->assertSame(200, $status);
+        $this->assertSame($key, $body['data']['key']);
+        $this->assertSame(self::USER_ID, $body['data']['user_id']);
+        $this->assertSame(0, $body['data']['is_admin']);
+        $this->assertArrayNotHasKey('id', $body['data']);
+    }
+
+    public function testGetMeByAdminReturnsIsAdmin(): void
+    {
+        (new AuthenticatedWriter())->getMe();
+        [$status, $body] = $this->response();
+
+        $this->assertSame(200, $status);
+        $this->assertSame($this->adminKey, $body['data']['key']);
+        $this->assertSame(1, $body['data']['is_admin']);
+    }
+
+    public function testGetMeByUnregisteredUserReturns404(): void
+    {
+        $this->loginAs('__phpunit_unregistered__');
+
+        (new AuthenticatedWriter())->getMe();
+
+        $this->assertSame(404, $this->response()[0]);
+    }
+
+    public function testGetMeWithoutTokenReturns401(): void
+    {
+        (new Writer())->getMe();
+
+        $this->assertSame(401, $this->response()[0]);
+    }
+
+    public function testGetMeWhenAuthServerUnreachableReturns502(): void
+    {
+        (new UnreachableAuthWriter())->getMe();
+
+        $this->assertSame(502, $this->response()[0]);
+    }
+
+    /*
      * POST /writers
      */
 

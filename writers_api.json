@@ -1,0 +1,1182 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "writers API",
+        "version": "1.0.0",
+        "summary": "複数サイトのコンテンツを管理するREST API",
+        "description": "FlightPHP + MySQLで構築したコンテンツ管理サーバーのAPIです。\n\n- 仕様の正本は`/documents/api-conventions.md`と`/documents/api/*.md`です。このファイルは正本から作成した参照用で、食い違いがある場合は正本を優先します。\n- すべてのレスポンスは`Envelope`の形式で返却します（ルート未定義の`404`も同様）。\n- 連番のIDは返さず、文字列化した`key`を使います。他のリソースの参照も`<名前>_key`で返します（参照先なしは`null`）。\n- 読み取り（`GET`）は認証不要、書き込み（`POST` / `PUT` / `DELETE`）はBearerトークンが必須です。\n- 日時は`Y-m-d H:i:s`形式の文字列です。タイムゾーンは日本時間（JST）です。",
+        "contact": {
+            "name": "",
+            "url": "",
+            "email": ""
+        },
+        "license": {
+            "name": "MIT",
+            "identifier": "MIT"
+        }
+    },
+    "servers": [
+        {
+            "url": "https://writers.hyperdb.cloud/api/v1",
+            "description": "本番（仮実装で確認中）"
+        }
+    ],
+    "tags": [
+        { "name": "writers", "description": "執筆者" },
+        { "name": "sites", "description": "サイト" },
+        { "name": "site_writers", "description": "サイトと執筆者の紐付け" },
+        { "name": "types", "description": "コンテンツタイプ（全サイト共通）" },
+        { "name": "categories", "description": "カテゴリー（サイトごと）" },
+        { "name": "tags", "description": "タグ（サイトごと）" },
+        { "name": "contents", "description": "コンテンツ（サイトごと）" }
+    ],
+    "paths": {
+        "/writers": {
+            "get": {
+                "tags": ["writers"],
+                "operationId": "listWriters",
+                "summary": "執筆者の一覧取得",
+                "description": "トークンは任意。管理者のトークンを添付した場合のみ`user_id`と`is_admin`を含めます。並び順: 未定（ORDER BYの指定なし）。",
+                "security": [{}, { "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/WriterList" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "post": {
+                "tags": ["writers"],
+                "operationId": "createWriter",
+                "summary": "執筆者の追加（管理者）",
+                "description": "`is_admin`はAPIでは設定できません（指定しても無視）。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/WriterCreateInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/WriterItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/writers/me": {
+            "get": {
+                "tags": ["writers"],
+                "operationId": "getLoginWriter",
+                "summary": "ログイン中の執筆者の取得",
+                "description": "トークンの持ち主の執筆者を返します。本人の情報のため、管理者でなくても`user_id`と`is_admin`を含めます。トークンは有効でも執筆者として未登録の場合は`404`です。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/WriterItem" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/writers/{id}": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["writers"],
+                "operationId": "getWriter",
+                "summary": "執筆者の詳細取得",
+                "description": "トークンは任意。管理者のトークンを添付した場合のみ`user_id`と`is_admin`を含めます。",
+                "security": [{}, { "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/WriterItem" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "put": {
+                "tags": ["writers"],
+                "operationId": "updateWriter",
+                "summary": "執筆者の更新（管理者または本人）",
+                "description": "更新できるのは`nickname`のみ。`user_id`の付け替えはできません。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/WriterUpdateInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "delete": {
+                "tags": ["writers"],
+                "operationId": "deleteWriter",
+                "summary": "執筆者の削除（管理者）",
+                "description": "コンテンツまたはサイト執筆者から参照されている場合は`409`。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites": {
+            "get": {
+                "tags": ["sites"],
+                "operationId": "listSites",
+                "summary": "サイトの一覧取得",
+                "description": "並び順: 登録順。",
+                "security": [{}],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/SiteList" }
+                }
+            },
+            "post": {
+                "tags": ["sites"],
+                "operationId": "createSite",
+                "summary": "サイトの追加（管理者）",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/SiteInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/SiteItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites/{id}": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["sites"],
+                "operationId": "getSite",
+                "summary": "サイトの詳細取得",
+                "security": [{}],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/SiteItem" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "put": {
+                "tags": ["sites"],
+                "operationId": "updateSite",
+                "summary": "サイトの更新（管理者）",
+                "description": "`url`と`name`の両方を指定します。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/SiteInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "delete": {
+                "tags": ["sites"],
+                "operationId": "deleteSite",
+                "summary": "サイトの削除（管理者）",
+                "description": "紐付くデータ（コンテンツ・カテゴリー・タグ・サイト執筆者）が1件でもあれば`409`。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites/{site}/writers": {
+            "parameters": [{ "$ref": "#/components/parameters/Site" }],
+            "get": {
+                "tags": ["site_writers"],
+                "operationId": "listSiteWriters",
+                "summary": "サイトに紐付いた執筆者の一覧取得",
+                "description": "トークンは任意。管理者のトークンを添付した場合のみ`user_id`と`is_admin`を含めます。並び順: 紐付けた日時の古い順。",
+                "security": [{}, { "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/WriterList" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "post": {
+                "tags": ["site_writers"],
+                "operationId": "addSiteWriter",
+                "summary": "サイトに執筆者を紐付ける（管理者）",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/SiteWriterInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/WriterItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites/{site}/writers/{writer}": {
+            "parameters": [
+                { "$ref": "#/components/parameters/Site" },
+                { "$ref": "#/components/parameters/Writer" }
+            ],
+            "delete": {
+                "tags": ["site_writers"],
+                "operationId": "removeSiteWriter",
+                "summary": "サイトと執筆者の紐付けを外す（管理者）",
+                "description": "紐付けを外しても、その執筆者のコンテンツは削除しません。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/types": {
+            "get": {
+                "tags": ["types"],
+                "operationId": "listTypes",
+                "summary": "タイプの一覧取得",
+                "description": "並び順: 登録順。",
+                "security": [{}],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/TypeList" }
+                }
+            },
+            "post": {
+                "tags": ["types"],
+                "operationId": "createType",
+                "summary": "タイプの追加（管理者）",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/TypeInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/TypeItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/types/{id}": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["types"],
+                "operationId": "getType",
+                "summary": "タイプの詳細取得",
+                "security": [{}],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/TypeItem" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "put": {
+                "tags": ["types"],
+                "operationId": "updateType",
+                "summary": "タイプの更新（管理者）",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/TypeInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "delete": {
+                "tags": ["types"],
+                "operationId": "deleteType",
+                "summary": "タイプの削除（管理者）",
+                "description": "コンテンツから参照されている場合は`409`。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites/{site}/categories": {
+            "parameters": [{ "$ref": "#/components/parameters/Site" }],
+            "get": {
+                "tags": ["categories"],
+                "operationId": "listCategories",
+                "summary": "サイトのカテゴリー一覧取得",
+                "description": "階層はフラットな配列で返します（`parent_key`でツリーを組み立てる）。並び順: 登録順。",
+                "security": [{}],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/CategoryList" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "post": {
+                "tags": ["categories"],
+                "operationId": "createCategory",
+                "summary": "サイトにカテゴリーを追加（サイトの執筆者）",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/CategoryInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/CategoryItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/categories/{id}": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["categories"],
+                "operationId": "getCategory",
+                "summary": "カテゴリーの詳細取得",
+                "security": [{}],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/CategoryItem" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "put": {
+                "tags": ["categories"],
+                "operationId": "updateCategory",
+                "summary": "カテゴリーの更新（サイトの執筆者）",
+                "description": "`parent`を省略すると最上位に移動します。自分自身や子孫は親にできません。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/CategoryInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "delete": {
+                "tags": ["categories"],
+                "operationId": "deleteCategory",
+                "summary": "カテゴリーの削除（サイトの執筆者）",
+                "description": "子カテゴリーがある、またはコンテンツから参照されている場合は`409`。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites/{site}/tags": {
+            "parameters": [{ "$ref": "#/components/parameters/Site" }],
+            "get": {
+                "tags": ["tags"],
+                "operationId": "listTags",
+                "summary": "サイトのタグ一覧取得",
+                "description": "並び順: 登録順。",
+                "security": [{}],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/TagList" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "post": {
+                "tags": ["tags"],
+                "operationId": "createTag",
+                "summary": "サイトにタグを追加（サイトの執筆者）",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/TagInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/TagItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/tags/{id}": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["tags"],
+                "operationId": "getTag",
+                "summary": "タグの詳細取得",
+                "security": [{}],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/TagItem" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "put": {
+                "tags": ["tags"],
+                "operationId": "updateTag",
+                "summary": "タグの更新（サイトの執筆者）",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/TagInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "delete": {
+                "tags": ["tags"],
+                "operationId": "deleteTag",
+                "summary": "タグの削除（サイトの執筆者）",
+                "description": "コンテンツに付けられている場合は`409`。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites/{site}/contents": {
+            "parameters": [{ "$ref": "#/components/parameters/Site" }],
+            "get": {
+                "tags": ["contents"],
+                "operationId": "listContents",
+                "summary": "サイトのコンテンツ一覧取得",
+                "description": "トークンなし: 公開中（`status`が`published`かつ`published_at`が現在日時以前）のみ。\nトークンあり: サイトの執筆者（管理者を含む）は下書き・公開予約も含めて返す。それ以外のユーザーは公開中のみ（`403`にはしない）。\n並び順: 公開日時の新しい順（公開日時のない下書きは最後）。一覧にも`body`が含まれます。",
+                "security": [{}, { "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" },
+                    {
+                        "name": "category",
+                        "in": "query",
+                        "description": "カテゴリーの`key`で絞り込む（子カテゴリーは含まない）",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "tag",
+                        "in": "query",
+                        "description": "タグの`key`で絞り込む",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "タイプの`key`で絞り込む",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "writer",
+                        "in": "query",
+                        "description": "執筆者の`key`で絞り込む",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ContentList" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "post": {
+                "tags": ["contents"],
+                "operationId": "createContent",
+                "summary": "サイトにコンテンツを追加（サイトの執筆者）",
+                "description": "執筆者はトークンの持ち主になります（ボディでは指定しない）。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ContentInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/ContentItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/contents/{id}": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["contents"],
+                "operationId": "getContent",
+                "summary": "コンテンツの詳細取得",
+                "description": "公開中でないものは、サイトの執筆者（管理者を含む）以外には`404`。",
+                "security": [{}, { "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ContentItem" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "put": {
+                "tags": ["contents"],
+                "operationId": "updateContent",
+                "summary": "コンテンツの更新（本人かつサイトの執筆者／管理者）",
+                "description": "全項目を指定し直します（部分更新ではない）。省略した任意項目は、タイプ・カテゴリーは未定、タグはなし、`status`は`draft`として扱います。下書きで`published_at`を省略すると公開日時は消えます。執筆者は変わりません。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ContentInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "delete": {
+                "tags": ["contents"],
+                "operationId": "deleteContent",
+                "summary": "コンテンツの削除（本人かつサイトの執筆者／管理者）",
+                "description": "タグの紐付けも合わせて削除します。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "`commons.hyperdb.cloud`で発行されたトークン（Base64URL・22文字）。このサーバーは`POST https://commons.hyperdb.cloud/api/v1/tokens/valid`でトークンを判定します。トークンの取得方法（commonsのログインAPI）と有効期限: 不明（commons側の仕様。このプロジェクトの範囲外）。"
+            }
+        },
+        "parameters": {
+            "Page": {
+                "name": "page",
+                "in": "query",
+                "description": "ページ番号（0始まり。負の値は0として扱う）",
+                "schema": { "type": "integer", "default": 0 }
+            },
+            "Rows": {
+                "name": "rows",
+                "in": "query",
+                "description": "1ページあたりの件数（0以下は既定値として扱う）。上限: なし（未定）",
+                "schema": { "type": "integer", "default": 10 }
+            },
+            "Id": {
+                "name": "id",
+                "in": "path",
+                "required": true,
+                "description": "リソースの`key`",
+                "schema": { "type": "string" }
+            },
+            "Site": {
+                "name": "site",
+                "in": "path",
+                "required": true,
+                "description": "サイトの`key`（存在しない場合は`404`）",
+                "schema": { "type": "string" }
+            },
+            "Writer": {
+                "name": "writer",
+                "in": "path",
+                "required": true,
+                "description": "執筆者の`key`",
+                "schema": { "type": "string" }
+            }
+        },
+        "schemas": {
+            "Envelope": {
+                "type": "object",
+                "description": "すべてのレスポンスの共通形式",
+                "required": ["api_version", "api_route", "send_at", "message", "data"],
+                "properties": {
+                    "api_version": { "type": "string", "examples": ["1.0.0"] },
+                    "api_route": { "type": "string", "description": "リクエストされたURL", "examples": ["/api/v1/writers"] },
+                    "send_at": { "$ref": "#/components/schemas/DateTime" },
+                    "message": { "type": "string", "description": "処理結果のメッセージ（日本語）", "examples": ["一覧が取得できました"] },
+                    "data": { "description": "処理結果のデータ（ない場合は空配列）" }
+                }
+            },
+            "EmptyData": {
+                "type": "array",
+                "maxItems": 0,
+                "description": "データなし（空配列）"
+            },
+            "ValidationErrors": {
+                "type": "object",
+                "description": "入力チェックエラー。キーはボディの項目名、値はエラーメッセージの配列",
+                "additionalProperties": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "examples": [
+                    {
+                        "url": ["URLは形式が正しくありません"],
+                        "name": ["サイト名は必須項目です"]
+                    }
+                ]
+            },
+            "DateTime": {
+                "type": "string",
+                "description": "`Y-m-d H:i:s`形式。タイムゾーンは日本時間（JST）",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$",
+                "examples": ["2026-10-19 12:34:56"]
+            },
+            "Key": {
+                "type": "string",
+                "description": "連番IDを文字列化した値（Sqids）",
+                "examples": ["Uk3Qx"]
+            },
+            "Writer": {
+                "type": "object",
+                "required": ["key", "nickname", "created_at", "updated_at"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "user_id": { "type": "string", "maxLength": 32, "description": "commonsのユーザーID（管理者のトークンを添付したときのみ）" },
+                    "nickname": { "type": "string", "maxLength": 32 },
+                    "is_admin": { "type": "integer", "enum": [0, 1], "description": "管理者フラグ（管理者のトークンを添付したときのみ）" },
+                    "created_at": { "$ref": "#/components/schemas/DateTime" },
+                    "updated_at": { "$ref": "#/components/schemas/DateTime" }
+                }
+            },
+            "Site": {
+                "type": "object",
+                "required": ["key", "url", "name", "created_at", "updated_at"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "url": { "type": "string", "maxLength": 255, "description": "末尾の`/`は除去済み" },
+                    "name": { "type": "string", "maxLength": 255 },
+                    "created_at": { "$ref": "#/components/schemas/DateTime" },
+                    "updated_at": { "$ref": "#/components/schemas/DateTime" }
+                }
+            },
+            "Type": {
+                "type": "object",
+                "required": ["key", "name", "created_at", "updated_at"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "name": { "type": "string", "maxLength": 255 },
+                    "created_at": { "$ref": "#/components/schemas/DateTime" },
+                    "updated_at": { "$ref": "#/components/schemas/DateTime" }
+                }
+            },
+            "Category": {
+                "type": "object",
+                "required": ["key", "category", "parent_key", "site_key", "created_at", "updated_at"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "category": { "type": "string", "maxLength": 255 },
+                    "parent_key": { "type": ["string", "null"], "description": "親カテゴリーの`key`（最上位は`null`）" },
+                    "site_key": { "$ref": "#/components/schemas/Key" },
+                    "created_at": { "$ref": "#/components/schemas/DateTime" },
+                    "updated_at": { "$ref": "#/components/schemas/DateTime" }
+                }
+            },
+            "Tag": {
+                "type": "object",
+                "required": ["key", "tag", "site_key", "created_at", "updated_at"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "tag": { "type": "string", "maxLength": 255, "description": "`#`は付かない" },
+                    "site_key": { "$ref": "#/components/schemas/Key" },
+                    "created_at": { "$ref": "#/components/schemas/DateTime" },
+                    "updated_at": { "$ref": "#/components/schemas/DateTime" }
+                }
+            },
+            "ContentTag": {
+                "type": "object",
+                "required": ["key", "tag"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "tag": { "type": "string" }
+                }
+            },
+            "Content": {
+                "type": "object",
+                "required": ["key", "title", "body", "status", "published_at", "type_key", "category_key", "site_key", "writer_key", "tags", "created_at", "updated_at"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "title": { "type": "string", "maxLength": 255 },
+                    "body": { "type": ["string", "null"], "description": "本文（Markdown）。表示時のサニタイズはクライアント側で行う" },
+                    "status": { "type": "string", "enum": ["draft", "published"] },
+                    "published_at": {
+                        "oneOf": [{ "$ref": "#/components/schemas/DateTime" }, { "type": "null" }],
+                        "description": "公開日時（未公開の下書きは`null`）。`published`で未来の日時は公開予約"
+                    },
+                    "type_key": { "type": ["string", "null"], "description": "タイプの`key`（未定は`null`）" },
+                    "category_key": { "type": ["string", "null"], "description": "カテゴリーの`key`（未定は`null`）" },
+                    "site_key": { "$ref": "#/components/schemas/Key" },
+                    "writer_key": { "$ref": "#/components/schemas/Key" },
+                    "tags": { "type": "array", "items": { "$ref": "#/components/schemas/ContentTag" } },
+                    "created_at": { "$ref": "#/components/schemas/DateTime" },
+                    "updated_at": { "$ref": "#/components/schemas/DateTime" }
+                }
+            },
+            "WriterCreateInput": {
+                "type": "object",
+                "required": ["user_id", "nickname"],
+                "properties": {
+                    "user_id": { "type": "string", "maxLength": 32, "description": "`commons.hyperdb.cloud`のユーザーID（一意）" },
+                    "nickname": { "type": "string", "maxLength": 32 }
+                }
+            },
+            "WriterUpdateInput": {
+                "type": "object",
+                "required": ["nickname"],
+                "properties": {
+                    "nickname": { "type": "string", "maxLength": 32 }
+                }
+            },
+            "SiteInput": {
+                "type": "object",
+                "required": ["url", "name"],
+                "properties": {
+                    "url": { "type": "string", "maxLength": 255, "description": "`http://`または`https://`で始まるURL（一意。末尾の`/`は除去して保存）" },
+                    "name": { "type": "string", "maxLength": 255 }
+                }
+            },
+            "SiteWriterInput": {
+                "type": "object",
+                "required": ["writer"],
+                "properties": {
+                    "writer": { "type": "string", "description": "執筆者の`key`" }
+                }
+            },
+            "TypeInput": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": { "type": "string", "maxLength": 255, "description": "一意" }
+                }
+            },
+            "CategoryInput": {
+                "type": "object",
+                "required": ["category"],
+                "properties": {
+                    "category": { "type": "string", "maxLength": 255, "description": "同じサイト・同じ親の中で一意" },
+                    "parent": { "type": "string", "description": "親カテゴリーの`key`（同じサイトのもの。未指定・空文字は最上位）" }
+                }
+            },
+            "TagInput": {
+                "type": "object",
+                "required": ["tag"],
+                "properties": {
+                    "tag": { "type": "string", "maxLength": 255, "description": "先頭に`#`を付けない。同じサイトの中で一意" }
+                }
+            },
+            "ContentInput": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                    "title": { "type": "string", "maxLength": 255 },
+                    "body": { "type": "string", "description": "Markdown。65,535バイト以内" },
+                    "status": { "type": "string", "enum": ["draft", "published"], "default": "draft" },
+                    "published_at": {
+                        "$ref": "#/components/schemas/DateTime",
+                        "description": "`published`で未指定の場合は、既存の公開日時を維持（なければ現在日時）。未来の日時は公開予約"
+                    },
+                    "type": { "type": "string", "description": "タイプの`key`（未指定・空文字は未定）" },
+                    "category": { "type": "string", "description": "同じサイトのカテゴリーの`key`（未指定・空文字は未定）" },
+                    "tags": { "type": "array", "items": { "type": "string" }, "description": "同じサイトのタグの`key`の配列（指定したタグに置き換わる）" }
+                }
+            }
+        },
+        "responses": {
+            "Done": {
+                "description": "更新・削除の成功（`data`は空配列）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/EmptyData" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "WriterList": {
+                "description": "執筆者の配列（0件でも`200`）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Writer" } } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "WriterItem": {
+                "description": "執筆者",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/Writer" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "SiteList": {
+                "description": "サイトの配列（0件でも`200`）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Site" } } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "SiteItem": {
+                "description": "サイト",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/Site" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "TypeList": {
+                "description": "タイプの配列（0件でも`200`）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Type" } } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "TypeItem": {
+                "description": "タイプ",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/Type" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "CategoryList": {
+                "description": "カテゴリーの配列（0件でも`200`）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "CategoryItem": {
+                "description": "カテゴリー",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/Category" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "TagList": {
+                "description": "タグの配列（0件でも`200`）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Tag" } } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "TagItem": {
+                "description": "タグ",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/Tag" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "ContentList": {
+                "description": "コンテンツの配列（0件でも`200`。存在しない`key`で絞り込んだ場合も0件）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Content" } } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "ContentItem": {
+                "description": "コンテンツ",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/Content" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "ValidationError": {
+                "description": "パラメーターが不足・不正（`data`に項目ごとのエラーメッセージ）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/ValidationErrors" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "Unauthorized": {
+                "description": "トークンが未添付・形式不正・無効（トークン任意の`GET`でも、添付したトークンが無効なら`401`）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/EmptyData" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "Forbidden": {
+                "description": "操作する権限がない（執筆者として未登録の場合も含む）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/EmptyData" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "NotFound": {
+                "description": "指定したリソース（またはサイト）が存在しない",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/EmptyData" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "Conflict": {
+                "description": "一意であるべき値が登録済み、または参照されているため削除できない",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/EmptyData" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "BadGateway": {
+                "description": "`commons.hyperdb.cloud`への問い合わせに失敗した",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/EmptyData" } } }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

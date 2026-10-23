@@ -22,6 +22,8 @@ class Writer extends Base implements BaseMethod
     {
         Flight::group('/writers', function ()
         {
+            // `me`がkeyとして扱われないように`/@id`より先に登録する
+            Flight::route('GET /me',        [self::class, 'getMe']);
             Flight::route('GET /@id',       [self::class, 'getDetail']);
             Flight::route('PUT /@id',       [self::class, 'execUpdate']);
             Flight::route('DELETE /@id',    [self::class, 'execDelete']);
@@ -115,6 +117,38 @@ class Writer extends Base implements BaseMethod
                 "見つかりませんでした"
             );
         }
+    }
+
+    /**
+     * ログイン中の執筆者の取得
+     *
+     * @return void
+     */
+    public function getMe(): void
+    {
+        // 認証できなければ中断（レスポンスは送信済み）
+        if (!$this->authenticate())
+        {
+            return;
+        }
+        // トークンは有効でも執筆者として未登録なら404
+        if (count($this->login_writer) === 0)
+        {
+            $this->resultJson(
+                [],
+                404,
+                $this->route,
+                "執筆者として登録されていません"
+            );
+            return;
+        }
+        // 本人の情報なのでuser_idとis_adminも返す
+        $this->resultJson(
+            $this->toResponseRow($this->login_writer),
+            200,
+            $this->route,
+            "取得できました"
+        );
     }
 
     /**
