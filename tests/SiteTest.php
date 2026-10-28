@@ -20,14 +20,11 @@ class SiteTest extends DbTestCase
     public function testGetListReturnsKeyInsteadOfId(): void
     {
         $this->createSite();
-        Flight::request()->query->setData(['rows' => '1000']);
-
-        (new Site())->getList();
-        [$status, $body] = $this->response();
+        [$status, $rows] = $this->fetchAllPages(fn() => (new Site())->getList());
 
         $this->assertSame(200, $status);
-        $this->assertContains(self::URL, array_column($body['data'], 'url'));
-        foreach ($body['data'] as $row)
+        $this->assertContains(self::URL, array_column($rows, 'url'));
+        foreach ($rows as $row)
         {
             $this->assertArrayHasKey('key', $row);
             $this->assertArrayNotHasKey('id', $row);

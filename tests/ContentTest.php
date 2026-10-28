@@ -193,6 +193,20 @@ class ContentTest extends DbTestCase
         $this->assertSame([], $body['data']);
     }
 
+    public function testGetListRowsOverMaxIsLimitedToMax(): void
+    {
+        for ($i = 1; $i <= 12; $i++)
+        {
+            $this->createContent();
+        }
+        Flight::request()->query->setData(['rows' => '1000']);
+
+        (new Content())->getList($this->siteKey);
+
+        // 上限（10件）を超える値は上限として扱う
+        $this->assertCount(10, $this->response()[1]['data']);
+    }
+
     public function testGetListMissingSiteReturns404(): void
     {
         (new Content())->getList($this->missingKey());
@@ -214,6 +228,60 @@ class ContentTest extends DbTestCase
         $content->getList($this->siteKey);
 
         $this->assertSame(401, $this->response()[0]);
+    }
+
+    /*
+     * GET /sites/@site/contents/@type/latest
+     */
+
+    public function testGetLatestReturnsPublishedOfTypeInOrder(): void
+    {
+        $typeId = HashTools::decodeSqid($this->typeKey);
+        $this->createContent(['title' => '古い記事', 'type_id' => $typeId, 'published_at' => '2026-01-01 00:00:00']);
+        $this->createContent(['title' => '新しい記事', 'type_id' => $typeId, 'published_at' => '2026-06-01 00:00:00']);
+        $this->createContent(['title' => '別タイプ']);
+        $this->createContent(['title' => '下書き', 'type_id' => $typeId, 'status' => 'draft', 'published_at' => null]);
+
+        // サイトの執筆者のトークンがあっても下書きは含めない
+        (new AuthenticatedContent())->getLatest($this->siteKey, $this->typeKey);
+        [$status, $body] = $this->response();
+
+        $this->assertSame(200, $status);
+        $this->assertSame(['新しい記事', '古い記事'], array_column($body['data'], 'title'));
+    }
+
+    public function testGetLatestLimitsRows(): void
+    {
+        $typeId = HashTools::decodeSqid($this->typeKey);
+        for ($i = 1; $i <= 12; $i++)
+        {
+            $this->createContent(['type_id' => $typeId, 'published_at' => sprintf('2026-01-%02d 00:00:00', $i)]);
+        }
+
+        (new Content())->getLatest($this->siteKey, $this->typeKey);
+        $this->assertCount(10, $this->response()[1]['data']);
+
+        Flight::response()->clear();
+        Flight::request()->query->setData(['limit' => '3']);
+        (new Content())->getLatest($this->siteKey, $this->typeKey);
+        $this->assertSame('2026-01-12 00:00:00', $this->response()[1]['data'][0]['published_at']);
+        $this->assertCount(3, $this->response()[1]['data']);
+
+        // 上限を超える値は上限（10件）とする
+        Flight::response()->clear();
+        Flight::request()->query->setData(['limit' => '20']);
+        (new Content())->getLatest($this->siteKey, $this->typeKey);
+        $this->assertCount(10, $this->response()[1]['data']);
+    }
+
+    public function testGetLatestMissingSiteOrTypeReturns404(): void
+    {
+        (new Content())->getLatest($this->missingKey(), $this->typeKey);
+        $this->assertSame(404, $this->response()[0]);
+
+        Flight::response()->clear();
+        (new Content())->getLatest($this->siteKey, $this->missingKey());
+        $this->assertSame(404, $this->response()[0]);
     }
 
     /*

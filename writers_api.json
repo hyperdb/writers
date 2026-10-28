@@ -635,6 +635,37 @@
                 }
             }
         },
+        "/sites/{site}/contents/{type}/latest": {
+            "parameters": [
+                { "$ref": "#/components/parameters/Site" },
+                {
+                    "name": "type",
+                    "in": "path",
+                    "required": true,
+                    "description": "タイプの`key`（存在しない場合は`404`）",
+                    "schema": { "type": "string" }
+                }
+            ],
+            "get": {
+                "tags": ["contents"],
+                "operationId": "listLatestContents",
+                "summary": "サイトの指定タイプの新着一覧取得",
+                "description": "公開中のみ、公開日時の新しい順。トークンは使いません（添付しても認証せず、下書き・公開予約は含みません）。",
+                "security": [{}],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "取得件数（0以下・数値でない値は既定値、上限を超える値は上限として扱う）。上限: 10",
+                        "schema": { "type": "integer", "default": 10, "maximum": 10 }
+                    }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ContentList" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
         "/contents/{id}": {
             "parameters": [{ "$ref": "#/components/parameters/Id" }],
             "get": {
@@ -707,8 +738,8 @@
             "Rows": {
                 "name": "rows",
                 "in": "query",
-                "description": "1ページあたりの件数（0以下は既定値として扱う）。上限: なし（未定）",
-                "schema": { "type": "integer", "default": 10 }
+                "description": "1ページあたりの件数（0以下は既定値、上限を超える値は上限として扱う）。上限: 10",
+                "schema": { "type": "integer", "default": 10, "maximum": 10 }
             },
             "Id": {
                 "name": "id",

@@ -32,15 +32,12 @@ class WriterTest extends DbTestCase
     public function testGetListReturnsKeyInsteadOfId(): void
     {
         $this->createWriter();
-        Flight::request()->query->setData(['rows' => '1000']);
-
         // 管理者にはuser_idも返す
-        (new AuthenticatedWriter())->getList();
-        [$status, $body] = $this->response();
+        [$status, $rows] = $this->fetchAllPages(fn() => (new AuthenticatedWriter())->getList());
 
         $this->assertSame(200, $status);
-        $this->assertContains(self::USER_ID, array_column($body['data'], 'user_id'));
-        foreach ($body['data'] as $row)
+        $this->assertContains(self::USER_ID, array_column($rows, 'user_id'));
+        foreach ($rows as $row)
         {
             $this->assertArrayHasKey('key', $row);
             $this->assertArrayNotHasKey('id', $row);
@@ -96,7 +93,6 @@ class WriterTest extends DbTestCase
     {
         $key = $this->createWriter();
         $this->loginAs($userId);
-        Flight::request()->query->setData(['rows' => '1000']);
         $writer = fn(): Writer => $withToken ? new AuthenticatedWriter() : new Writer();
 
         $writer()->getList();

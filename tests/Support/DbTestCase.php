@@ -45,6 +45,30 @@ abstract class DbTestCase extends TestCase
     }
 
     /**
+     * 一覧を最後のページまで取得し、全ページの行をまとめて返す（rowsの上限があるため）
+     *
+     * @param callable(): void $getList 一覧取得を実行する関数
+     * @return array{0: int, 1: array<int,array>} 最初のページのステータスと全ページの行
+     */
+    protected function fetchAllPages(callable $getList): array
+    {
+        $rows = [];
+        for ($page = 0;; $page++)
+        {
+            Flight::response()->clear();
+            Flight::request()->query->setData(['page' => strval($page)]);
+            $getList();
+            [$status, $body] = $this->response();
+            $firstStatus ??= $status;
+            $rows = [...$rows, ...$body['data']];
+            if ($status !== 200 || count($body['data']) < 10)
+            {
+                return [$firstStatus, $rows];
+            }
+        }
+    }
+
+    /**
      * 存在しないデータのkeyを返す
      *
      * @return string

@@ -31,14 +31,11 @@ class TypeTest extends DbTestCase
     public function testGetListReturnsKeyInsteadOfId(): void
     {
         $this->createType();
-        Flight::request()->query->setData(['rows' => '1000']);
-
-        (new Type())->getList();
-        [$status, $body] = $this->response();
+        [$status, $rows] = $this->fetchAllPages(fn() => (new Type())->getList());
 
         $this->assertSame(200, $status);
-        $this->assertContains(self::NAME, array_column($body['data'], 'name'));
-        foreach ($body['data'] as $row)
+        $this->assertContains(self::NAME, array_column($rows, 'name'));
+        foreach ($rows as $row)
         {
             $this->assertArrayHasKey('key', $row);
             $this->assertArrayNotHasKey('id', $row);

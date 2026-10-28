@@ -34,6 +34,9 @@ class Content extends Base implements SiteScopedMethod
         "tag" => "tag_id",
     ];
 
+    /** 新着一覧の取得件数の既定値・上限 */
+    private const LATEST_LIMIT = 10;
+
     /**
      * ルーティング
      *
@@ -42,6 +45,7 @@ class Content extends Base implements SiteScopedMethod
     public static function registerRoutes(): void
     {
         Flight::route('GET /sites/@site/contents',  [self::class, 'getList']);
+        Flight::route('GET /sites/@site/contents/@type/latest', [self::class, 'getLatest']);
         Flight::route('POST /sites/@site/contents', [self::class, 'execAdd']);
         Flight::group('/contents', function ()
         {
@@ -96,6 +100,43 @@ class Content extends Base implements SiteScopedMethod
         $rows = array_map(fn($row): array => $row->getData(), $list);
 
         // 取得件数が0件でもOKにする
+        $this->resultJson($this->toResponseRows($rows), 200, $this->route, "一覧が取得できました");
+    }
+
+    /**
+     * サイトの指定タイプの新着コンテンツ一覧の取得（公開中のみ、公開日時の新しい順）
+     * 認証は不要（トークンが添付されていても認証しない）
+     *
+     * @param string $site_key
+     * @param string $type_key
+     * @return void
+     */
+    public function getLatest(string $site_key, string $type_key): void
+    {
+        $siteId = $this->findSiteId($site_key);
+        if ($siteId === 0)
+        {
+            $this->resultJson([], 404, $this->route, "サイトが見つかりませんでした");
+            return;
+        }
+        $typeId = HashTools::decodeSqid($type_key);
+        if ($typeId === 0 || count(TypeModel::detail($typeId)) === 0)
+        {
+            $this->resultJson([], 404, $this->route, "タイプが見つかりませんでした");
+            return;
+        }
+
+        // 0以下・数値でない値は既定値、上限を超える値は上限として扱う
+        $limit = $this->getIntParam("limit", self::LATEST_LIMIT);
+        $list = ContentModel::listBySite(
+            $siteId,
+            ["type_id" => $typeId],
+            false,
+            0,
+            $limit > 0 ? min($limit, self::LATEST_LIMIT) : self::LATEST_LIMIT
+        );
+        $rows = array_map(fn($row): array => $row->getData(), $list);
+
         $this->resultJson($this->toResponseRows($rows), 200, $this->route, "一覧が取得できました");
     }
 

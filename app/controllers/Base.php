@@ -17,6 +17,8 @@ class Base
     private const TOKEN_VALID_URL = 'https://commons.hyperdb.cloud/api/v1/tokens/valid';
     /** commonsへの問い合わせのタイムアウト（秒） */
     private const TOKEN_VALID_TIMEOUT = 5;
+    /** 一覧取得の1ページあたりの件数の上限 */
+    private const MAX_ROWS = 10;
 
     protected string $bearer_token;
     protected string $route;
@@ -391,8 +393,8 @@ class Base
         return [
             // 負のページ番号は0として扱う
             "page" => max($page, 0),
-            // 0以下の件数は既定値として扱う
-            "rows" => $rows > 0 ? $rows : 10,
+            // 0以下の件数は既定値、上限を超える件数は上限として扱う
+            "rows" => $rows > 0 ? min($rows, self::MAX_ROWS) : 10,
         ];
     }
 
