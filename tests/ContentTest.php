@@ -278,6 +278,55 @@ class ContentTest extends DbTestCase
     }
 
     /*
+     * GET /sites/@site/contents/@type/count
+     */
+
+    public function testGetCountReturnsTotalOfTypeIncludingDraftsForWriter(): void
+    {
+        $typeId = HashTools::decodeSqid($this->typeKey);
+        for ($i = 1; $i <= 12; $i++)
+        {
+            $this->createContent(['type_id' => $typeId]);
+        }
+        $this->createContent(['type_id' => $typeId, 'status' => 'draft', 'published_at' => null]);
+        $this->createContent(['title' => '別タイプ']);
+        // ページングの指定は無視される
+        Flight::request()->query->setData(['page' => '1', 'rows' => '5']);
+
+        (new AuthenticatedContent())->getCount($this->siteKey, $this->typeKey);
+        [$status, $body] = $this->response();
+
+        $this->assertSame(200, $status);
+        $this->assertSame(['count' => 13], $body['data']);
+
+        // トークンなしは公開中のみ
+        Flight::response()->clear();
+        (new Content())->getCount($this->siteKey, $this->typeKey);
+        $this->assertSame(['count' => 12], $this->response()[1]['data']);
+    }
+
+    public function testGetCountCombinesOtherFilters(): void
+    {
+        $typeId = HashTools::decodeSqid($this->typeKey);
+        $this->createContent(['type_id' => $typeId], [$this->tagKey1]);
+        $this->createContent(['type_id' => $typeId]);
+
+        Flight::request()->query->setData(['tag' => $this->tagKey1]);
+        (new Content())->getCount($this->siteKey, $this->typeKey);
+        $this->assertSame(['count' => 1], $this->response()[1]['data']);
+    }
+
+    public function testGetCountMissingSiteOrTypeReturns404(): void
+    {
+        (new Content())->getCount($this->missingKey(), $this->typeKey);
+        $this->assertSame(404, $this->response()[0]);
+
+        Flight::response()->clear();
+        (new Content())->getCount($this->siteKey, $this->missingKey());
+        $this->assertSame(404, $this->response()[0]);
+    }
+
+    /*
      * GET /sites/@site/contents/@type/latest
      */
 

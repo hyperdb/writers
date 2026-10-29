@@ -682,6 +682,56 @@
                 }
             }
         },
+        "/sites/{site}/contents/{type}/count": {
+            "parameters": [
+                { "$ref": "#/components/parameters/Site" },
+                {
+                    "name": "type",
+                    "in": "path",
+                    "required": true,
+                    "description": "タイプの`key`（存在しない場合は`404`）",
+                    "schema": { "type": "string" }
+                }
+            ],
+            "get": {
+                "tags": ["contents"],
+                "operationId": "countContentsByType",
+                "summary": "サイトの指定タイプのコンテンツ総件数取得",
+                "description": "`GET /sites/{site}/contents/{type}`で取得できるコンテンツの総件数（一覧のページ数の計算用）。トークンの扱い・絞り込みは一覧と同じ。`page` / `rows`は無視します。",
+                "security": [{}, { "bearerAuth": [] }],
+                "parameters": [
+                    { "name": "category", "in": "query", "description": "カテゴリーの`key`で絞り込む", "schema": { "type": "string" } },
+                    { "name": "tag", "in": "query", "description": "タグの`key`で絞り込む", "schema": { "type": "string" } },
+                    { "name": "writer", "in": "query", "description": "執筆者の`key`で絞り込む", "schema": { "type": "string" } }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "総件数（0件でも`200`。存在しない`key`で絞り込んだ場合も0件）",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        { "$ref": "#/components/schemas/Envelope" },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "object",
+                                                    "properties": { "count": { "type": "integer", "minimum": 0 } },
+                                                    "required": ["count"]
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
         "/sites/{site}/contents/{type}/latest": {
             "parameters": [
                 { "$ref": "#/components/parameters/Site" },

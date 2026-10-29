@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | `GET` | `/sites/@site/contents` | サイトのコンテンツ一覧取得 | 不要（任意） |
 | `GET` | `/sites/@site/contents/@type` | サイトの指定タイプのコンテンツ一覧取得 | 不要（任意） |
+| `GET` | `/sites/@site/contents/@type/count` | サイトの指定タイプのコンテンツ総件数取得 | 不要（任意） |
 | `GET` | `/sites/@site/contents/@type/latest` | サイトの指定タイプの新着一覧取得 | 不要 |
 | `POST` | `/sites/@site/contents` | サイトにコンテンツを追加 | サイトの執筆者 |
 | `GET` | `/contents/@id` | 詳細取得 | 不要（任意） |
@@ -75,6 +76,14 @@
   - クエリパラメーターの`type`は無視する（パスのタイプを優先）
 - レスポンス
   - `200`: コンテンツの配列（0件でも`200`。存在しない`key`で絞り込んだ場合も0件）
+  - `404`: サイトまたはタイプが存在しない
+
+## GET /sites/@site/contents/@type/count
+
+- `GET /sites/@site/contents/@type`で取得できるコンテンツの総件数を返す（一覧のページ数の計算用）
+  - 公開状態と取得範囲・クエリパラメーターの絞り込み（`category`, `tag`, `writer`）は一覧と同じ。`page`, `rows`は無視する
+- レスポンス
+  - `200`: `data`に`count`（総件数、整数）を入れる（0件でも`200`）
   - `404`: サイトまたはタイプが存在しない
 
 ## GET /sites/@site/contents/@type/latest

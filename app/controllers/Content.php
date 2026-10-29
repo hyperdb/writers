@@ -46,6 +46,7 @@ class Content extends Base implements SiteScopedMethod
     {
         Flight::route('GET /sites/@site/contents',  [self::class, 'getList']);
         Flight::route('GET /sites/@site/contents/@type', [self::class, 'getList']);
+        Flight::route('GET /sites/@site/contents/@type/count', [self::class, 'getCount']);
         Flight::route('GET /sites/@site/contents/@type/latest', [self::class, 'getLatest']);
         Flight::route('POST /sites/@site/contents', [self::class, 'execAdd']);
         Flight::group('/contents', function ()
@@ -62,9 +63,10 @@ class Content extends Base implements SiteScopedMethod
      *
      * @param string $site_key
      * @param ?string $type_key パスで指定されたタイプのkey（指定時はクエリの`type`より優先）
+     * @param bool $countOnly 一覧ではなく総件数（`data.count`）を返すか
      * @return void
      */
-    public function getList(string $site_key, ?string $type_key = null): void
+    public function getList(string $site_key, ?string $type_key = null, bool $countOnly = false): void
     {
         $authenticated = $this->authenticateIfToken();
         if ($authenticated === null)
@@ -100,6 +102,12 @@ class Content extends Base implements SiteScopedMethod
             }
             $filters["type_id"] = $typeId;
         }
+        if ($countOnly)
+        {
+            $count = ContentModel::countBySite($siteId, $filters, $includeUnpublished);
+            $this->resultJson(["count" => $count], 200, $this->route, "件数が取得できました");
+            return;
+        }
 
         $paging = $this->getPagingParams();
         $list = ContentModel::listBySite(
@@ -113,6 +121,18 @@ class Content extends Base implements SiteScopedMethod
 
         // 取得件数が0件でもOKにする
         $this->resultJson($this->toResponseRows($rows), 200, $this->route, "一覧が取得できました");
+    }
+
+    /**
+     * サイトの指定タイプのコンテンツ総件数の取得（取得範囲は一覧と同じ）
+     *
+     * @param string $site_key
+     * @param string $type_key
+     * @return void
+     */
+    public function getCount(string $site_key, string $type_key): void
+    {
+        $this->getList($site_key, $type_key, true);
     }
 
     /**

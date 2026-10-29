@@ -54,6 +54,39 @@ class ContentModel
         int $index,
         int $perPage
     ): array {
+        [$where, $params] = self::listCondition($siteId, $filters, $includeUnpublished);
+        $params[] = $index;
+        $params[] = $perPage;
+
+        $sql = "SELECT c.* FROM contents c WHERE {$where}"
+            . " ORDER BY c.published_at IS NULL, c.published_at DESC, c.id DESC LIMIT ?, ?";
+        return BaseModel::fetchAll($sql, $params);
+    }
+
+    /**
+     * サイトのコンテンツの総件数を取得（条件は`listBySite`と同じ）
+     *
+     * @param int $siteId
+     * @param array<string,int> $filters 絞り込み（type_id / category_id / writer_id / tag_id => ID）
+     * @param bool $includeUnpublished 下書き・公開予約中も含めるか
+     * @return integer
+     */
+    public static function countBySite(int $siteId, array $filters, bool $includeUnpublished): int
+    {
+        [$where, $params] = self::listCondition($siteId, $filters, $includeUnpublished);
+        return intval(BaseModel::fetchColumn("SELECT COUNT(*) FROM contents c WHERE {$where}", $params)[0] ?? 0);
+    }
+
+    /**
+     * 一覧・総件数の絞り込み条件を組み立てる
+     *
+     * @param int $siteId
+     * @param array<string,int> $filters
+     * @param bool $includeUnpublished
+     * @return array{0: string, 1: array} WHERE句（`WHERE`は含まない）とパラメーター
+     */
+    private static function listCondition(int $siteId, array $filters, bool $includeUnpublished): array
+    {
         $where = ["c.site_id = ?"];
         $params = [$siteId];
         if (!$includeUnpublished)
@@ -75,12 +108,7 @@ class ContentModel
             $where[] = "EXISTS (SELECT 1 FROM content_tags ct WHERE ct.content_id = c.id AND ct.tag_id = ?)";
             $params[] = $filters["tag_id"];
         }
-        $params[] = $index;
-        $params[] = $perPage;
-
-        $sql = "SELECT c.* FROM contents c WHERE " . implode(" AND ", $where)
-            . " ORDER BY c.published_at IS NULL, c.published_at DESC, c.id DESC LIMIT ?, ?";
-        return BaseModel::fetchAll($sql, $params);
+        return [implode(" AND ", $where), $params];
     }
 
     /**
