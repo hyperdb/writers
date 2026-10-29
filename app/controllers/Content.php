@@ -45,6 +45,7 @@ class Content extends Base implements SiteScopedMethod
     public static function registerRoutes(): void
     {
         Flight::route('GET /sites/@site/contents',  [self::class, 'getList']);
+        Flight::route('GET /sites/@site/contents/@type', [self::class, 'getList']);
         Flight::route('GET /sites/@site/contents/@type/latest', [self::class, 'getLatest']);
         Flight::route('POST /sites/@site/contents', [self::class, 'execAdd']);
         Flight::group('/contents', function ()
@@ -60,9 +61,10 @@ class Content extends Base implements SiteScopedMethod
      * サイトの執筆者（管理者を含む）は下書き・公開予約中も含め、それ以外は公開中のみ
      *
      * @param string $site_key
+     * @param ?string $type_key パスで指定されたタイプのkey（指定時はクエリの`type`より優先）
      * @return void
      */
-    public function getList(string $site_key): void
+    public function getList(string $site_key, ?string $type_key = null): void
     {
         $authenticated = $this->authenticateIfToken();
         if ($authenticated === null)
@@ -87,6 +89,16 @@ class Content extends Base implements SiteScopedMethod
                 $id = HashTools::decodeSqid($key);
                 $filters[$column] = $id > 0 ? $id : -1;
             }
+        }
+        if ($type_key !== null)
+        {
+            $typeId = HashTools::decodeSqid($type_key);
+            if ($typeId === 0 || count(TypeModel::detail($typeId)) === 0)
+            {
+                $this->resultJson([], 404, $this->route, "タイプが見つかりませんでした");
+                return;
+            }
+            $filters["type_id"] = $typeId;
         }
 
         $paging = $this->getPagingParams();

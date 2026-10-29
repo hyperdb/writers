@@ -57,7 +57,7 @@ writers API（このプロジェクト）を利用するCMSサイトを作ると
 
 ### トークン任意の`GET`での注意
 
-`/writers`・`/sites/{site}/writers`・`/sites/{site}/contents`・`/contents/{id}`の`GET`は、トークンを付けると認証を行います。
+`/writers`・`/sites/{site}/writers`・`/sites/{site}/contents`・`/sites/{site}/contents/{type}`・`/contents/{id}`の`GET`は、トークンを付けると認証を行います。
 
 - **期限切れのトークンを付けると、公開中の記事の取得でも`401`になります**
 - 読者向けの表示（公開ページ）ではトークンを付けないでください

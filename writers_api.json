@@ -635,6 +635,53 @@
                 }
             }
         },
+        "/sites/{site}/contents/{type}": {
+            "parameters": [
+                { "$ref": "#/components/parameters/Site" },
+                {
+                    "name": "type",
+                    "in": "path",
+                    "required": true,
+                    "description": "タイプの`key`（存在しない場合は`404`）",
+                    "schema": { "type": "string" }
+                }
+            ],
+            "get": {
+                "tags": ["contents"],
+                "operationId": "listContentsByType",
+                "summary": "サイトの指定タイプのコンテンツ一覧取得",
+                "description": "`GET /sites/{site}/contents`をパスのタイプで絞り込んだもの。タイプ以外（トークンの扱い・ページング・他の絞り込み・並び順）は同じ。クエリの`type`は無視します。",
+                "security": [{}, { "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" },
+                    {
+                        "name": "category",
+                        "in": "query",
+                        "description": "カテゴリーの`key`で絞り込む（子カテゴリーは含まない）",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "tag",
+                        "in": "query",
+                        "description": "タグの`key`で絞り込む",
+                        "schema": { "type": "string" }
+                    },
+                    {
+                        "name": "writer",
+                        "in": "query",
+                        "description": "執筆者の`key`で絞り込む",
+                        "schema": { "type": "string" }
+                    }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ContentList" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
         "/sites/{site}/contents/{type}/latest": {
             "parameters": [
                 { "$ref": "#/components/parameters/Site" },

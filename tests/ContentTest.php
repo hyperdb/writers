@@ -231,6 +231,53 @@ class ContentTest extends DbTestCase
     }
 
     /*
+     * GET /sites/@site/contents/@type
+     */
+
+    public function testGetListByTypeReturnsContentsOfTypeIncludingDraftsForWriter(): void
+    {
+        $typeId = HashTools::decodeSqid($this->typeKey);
+        $this->createContent(['title' => '公開', 'type_id' => $typeId, 'published_at' => '2026-01-01 00:00:00']);
+        $this->createContent(['title' => '下書き', 'type_id' => $typeId, 'status' => 'draft', 'published_at' => null]);
+        $this->createContent(['title' => '別タイプ']);
+        // クエリの`type`は無視される（パスのタイプが優先）
+        Flight::request()->query->setData(['type' => '!!']);
+
+        (new AuthenticatedContent())->getList($this->siteKey, $this->typeKey);
+        [$status, $body] = $this->response();
+
+        $this->assertSame(200, $status);
+        $this->assertSame(['公開', '下書き'], array_column($body['data'], 'title'));
+
+        // トークンなしは公開中のみ
+        Flight::response()->clear();
+        (new Content())->getList($this->siteKey, $this->typeKey);
+        $this->assertSame(['公開'], array_column($this->response()[1]['data'], 'title'));
+    }
+
+    public function testGetListByTypeCombinesOtherFilters(): void
+    {
+        $typeId = HashTools::decodeSqid($this->typeKey);
+        $this->createContent(['title' => '対象', 'type_id' => $typeId], [$this->tagKey1]);
+        $this->createContent(['title' => 'タグなし', 'type_id' => $typeId]);
+        Flight::request()->query->setData(['tag' => $this->tagKey1]);
+
+        (new Content())->getList($this->siteKey, $this->typeKey);
+
+        $this->assertSame(['対象'], array_column($this->response()[1]['data'], 'title'));
+    }
+
+    public function testGetListByTypeMissingSiteOrTypeReturns404(): void
+    {
+        (new Content())->getList($this->missingKey(), $this->typeKey);
+        $this->assertSame(404, $this->response()[0]);
+
+        Flight::response()->clear();
+        (new Content())->getList($this->siteKey, $this->missingKey());
+        $this->assertSame(404, $this->response()[0]);
+    }
+
+    /*
      * GET /sites/@site/contents/@type/latest
      */
 
