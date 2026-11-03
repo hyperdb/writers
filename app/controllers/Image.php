@@ -30,6 +30,7 @@ class Image extends Base implements SiteScopedMethod
     public static function registerRoutes(): void
     {
         Flight::route('GET /sites/@site/images',  [self::class, 'getList']);
+        Flight::route('GET /sites/@site/images/count', [self::class, 'getCount']);
         Flight::route('POST /sites/@site/images', [self::class, 'execAdd']);
         Flight::group('/images', function ()
         {
@@ -67,6 +68,25 @@ class Image extends Base implements SiteScopedMethod
 
         // 取得件数が0件でもOKにする
         $this->resultJson($rows, 200, $this->route, "一覧が取得できました");
+    }
+
+    /**
+     * サイトのイメージ総件数の取得（取得範囲は一覧と同じ）
+     *
+     * @param string $site_key
+     * @return void
+     */
+    public function getCount(string $site_key): void
+    {
+        $siteId = $this->findSiteId($site_key);
+        if ($siteId === 0)
+        {
+            $this->resultJson([], 404, $this->route, "サイトが見つかりませんでした");
+            return;
+        }
+
+        $count = ImageModel::countBySite($siteId);
+        $this->resultJson(["count" => $count], 200, $this->route, "件数が取得できました");
     }
 
     /**

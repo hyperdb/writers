@@ -133,6 +133,43 @@ class ImageTest extends DbTestCase
     }
 
     /*
+     * GET /sites/@site/images/count
+     */
+
+    public function testGetCountReturnsTotalOfSiteImages(): void
+    {
+        for ($i = 1; $i <= 12; $i++)
+        {
+            $this->createImage();
+        }
+        $this->createImage($this->createSite('https://other.example.com'));
+        // ページングの指定は無視される
+        Flight::request()->query->setData(['page' => '1', 'rows' => '5']);
+
+        (new Image())->getCount($this->siteKey);
+        [$status, $body] = $this->response();
+
+        $this->assertSame(200, $status);
+        $this->assertSame(['count' => 12], $body['data']);
+    }
+
+    public function testGetCountWithoutImagesReturnsZero(): void
+    {
+        (new Image())->getCount($this->siteKey);
+        [$status, $body] = $this->response();
+
+        $this->assertSame(200, $status);
+        $this->assertSame(['count' => 0], $body['data']);
+    }
+
+    public function testGetCountMissingSiteReturns404(): void
+    {
+        (new Image())->getCount($this->missingKey());
+
+        $this->assertSame(404, $this->response()[0]);
+    }
+
+    /*
      * GET /images/@id
      */
 

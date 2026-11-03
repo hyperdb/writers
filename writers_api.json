@@ -611,6 +611,40 @@
                 }
             }
         },
+        "/sites/{site}/images/count": {
+            "parameters": [{ "$ref": "#/components/parameters/Site" }],
+            "get": {
+                "tags": ["images"],
+                "operationId": "countImages",
+                "summary": "サイトのイメージ総件数取得",
+                "description": "`GET /sites/{site}/images`で取得できるイメージの総件数（一覧のページ数の計算用）。`page` / `rows`は無視します。",
+                "security": [{}],
+                "responses": {
+                    "200": {
+                        "description": "総件数（0件でも`200`）",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        { "$ref": "#/components/schemas/Envelope" },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "object",
+                                                    "properties": { "count": { "type": "integer", "minimum": 0 } },
+                                                    "required": ["count"]
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
         "/images/{id}": {
             "parameters": [{ "$ref": "#/components/parameters/Id" }],
             "get": {

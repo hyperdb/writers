@@ -42,6 +42,20 @@ class ImageModel
     }
 
     /**
+     * サイトのイメージ総件数を取得
+     *
+     * @param int $siteId
+     * @return integer
+     */
+    public static function countBySite(int $siteId): int
+    {
+        $sql = "SELECT COUNT(*) FROM images WHERE site_id = ?";
+        return intval(BaseModel::fetchColumn($sql, [
+            $siteId
+        ])[0] ?? 0);
+    }
+
+    /**
      * イメージ追加
      * idは自動採番
      *

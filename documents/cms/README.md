@@ -171,6 +171,7 @@ writers API（このプロジェクト）を利用するCMSサイトを作ると
 - `POST /sites/{site}/images`に`multipart/form-data`の項目`image`で送ります（JSONではありません）
   - `fetch`で`FormData`を送る場合、`Content-Type`ヘッダーは指定しないでください（ブラウザーが`boundary`付きで設定します）
 - 受け付ける形式は JPEG / PNG / GIF / WebP、5MBまでです（SVGは不可）
+- 一覧（`GET /sites/{site}/images`）のページ数は、総件数`GET /sites/{site}/images/count`（`data.count`）から計算してください
 - レスポンスの`url`（`/statics/images/<key>.<extension>`）はwriters APIのホストからのパスです。本文には`https://writers.hyperdb.cloud`を付けたURLを書いてください
 - 差し替え（`PUT /images/{id}`）は`key`が変わらないため、本文のリンクを書き換える必要はありません。ただし形式が変わると拡張子が変わり、`url`も変わります
   - ファイル名に日本語などが含まれると、差し替え時の`source_name`は`upload_...`になります
