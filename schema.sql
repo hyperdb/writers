@@ -117,3 +117,27 @@ CREATE TABLE IF NOT EXISTS types (
     UNIQUE KEY `uq_types_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='タイプ';
 
+/**
+ * エンティティ: イメージ
+ *
+ */
+CREATE TABLE IF NOT EXISTS images (
+    `id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'イメージID',
+    `site_id` INT(10) UNSIGNED NOT NULL COMMENT 'サイトID',
+    `source_name` VARCHAR(255) NOT NULL COMMENT '元ファイル名',
+    `extension` VARCHAR(8) NOT NULL COMMENT '拡張子（jpg / png / gif / webp）',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '作成日時',
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新日時',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='イメージ';
+
+/**
+ * エンティティマップ: コンテンツイメージ
+ *
+ */
+CREATE TABLE IF NOT EXISTS content_images (
+    `content_id` INT(10) UNSIGNED NOT NULL COMMENT 'コンテンツID',
+    `image_id` INT(10) UNSIGNED NOT NULL COMMENT 'イメージID',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '作成日時',
+    PRIMARY KEY (`content_id`, `image_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='コンテンツイメージ';

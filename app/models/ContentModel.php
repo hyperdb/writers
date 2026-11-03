@@ -221,6 +221,7 @@ class ContentModel
         BaseModel::transaction(function () use ($id): void
         {
             BaseModel::query("DELETE FROM content_tags WHERE content_id = ?", [$id]);
+            BaseModel::query("DELETE FROM content_images WHERE content_id = ?", [$id]);
             BaseModel::query("DELETE FROM contents WHERE id = ?", [$id]);
         });
     }

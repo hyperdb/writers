@@ -28,7 +28,9 @@
         { "name": "types", "description": "コンテンツタイプ（全サイト共通）" },
         { "name": "categories", "description": "カテゴリー（サイトごと）" },
         { "name": "tags", "description": "タグ（サイトごと）" },
-        { "name": "contents", "description": "コンテンツ（サイトごと）" }
+        { "name": "contents", "description": "コンテンツ（サイトごと）" },
+        { "name": "images", "description": "イメージ（サイトごと）" },
+        { "name": "content_images", "description": "コンテンツとイメージの紐付け" }
     ],
     "paths": {
         "/writers": {
@@ -219,7 +221,7 @@
                 "tags": ["sites"],
                 "operationId": "deleteSite",
                 "summary": "サイトの削除（管理者）",
-                "description": "紐付くデータ（コンテンツ・カテゴリー・タグ・サイト執筆者）が1件でもあれば`409`。",
+                "description": "紐付くデータ（コンテンツ・カテゴリー・タグ・イメージ・サイト執筆者）が1件でもあれば`409`。",
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
                     "200": { "$ref": "#/components/responses/Done" },
@@ -564,6 +566,162 @@
                     "403": { "$ref": "#/components/responses/Forbidden" },
                     "404": { "$ref": "#/components/responses/NotFound" },
                     "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/sites/{site}/images": {
+            "parameters": [{ "$ref": "#/components/parameters/Site" }],
+            "get": {
+                "tags": ["images"],
+                "operationId": "listImages",
+                "summary": "サイトのイメージ一覧取得",
+                "description": "並び順: 登録順。",
+                "security": [{}],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ImageList" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "post": {
+                "tags": ["images"],
+                "operationId": "createImage",
+                "summary": "サイトにイメージを追加（サイトの執筆者）",
+                "description": "画像は`/statics/images/<key>.<extension>`に保存され、APIを通さずに配信されます。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": { "$ref": "#/components/schemas/ImageInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/ImageItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/images/{id}": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["images"],
+                "operationId": "getImage",
+                "summary": "イメージの詳細取得",
+                "security": [{}],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ImageItem" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "put": {
+                "tags": ["images"],
+                "operationId": "replaceImage",
+                "summary": "イメージの差し替え（サイトの執筆者）",
+                "description": "`key`は変えずにファイルを入れ替えます。形式が変わると`extension`と`url`も変わります。ファイル名に英数字・`.`・`_`・`-`以外の文字が含まれると、`source_name`は`upload_...`になります。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": { "$ref": "#/components/schemas/ImageInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ImageItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "delete": {
+                "tags": ["images"],
+                "operationId": "deleteImage",
+                "summary": "イメージの削除（サイトの執筆者）",
+                "description": "ファイルも削除します。コンテンツから参照されている場合は`409`。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/contents/{id}/images": {
+            "parameters": [{ "$ref": "#/components/parameters/Id" }],
+            "get": {
+                "tags": ["content_images"],
+                "operationId": "listContentImages",
+                "summary": "コンテンツに紐付いたイメージの一覧取得",
+                "description": "並び順: 紐付けた日時の古い順。コンテンツの見え方は`GET /contents/{id}`と同じ（公開中でないものはサイトの執筆者以外には`404`）。トークンは任意。",
+                "security": [{}, { "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/parameters/Page" },
+                    { "$ref": "#/components/parameters/Rows" }
+                ],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/ImageList" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            },
+            "post": {
+                "tags": ["content_images"],
+                "operationId": "linkContentImage",
+                "summary": "コンテンツにイメージを紐付ける（本人）",
+                "description": "紐付いたイメージは削除できなくなります（`409`）。",
+                "security": [{ "bearerAuth": [] }],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/ContentImageInput" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "$ref": "#/components/responses/ImageItem" },
+                    "400": { "$ref": "#/components/responses/ValidationError" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" },
+                    "502": { "$ref": "#/components/responses/BadGateway" }
+                }
+            }
+        },
+        "/contents/{id}/images/{image}": {
+            "parameters": [
+                { "$ref": "#/components/parameters/Id" },
+                { "name": "image", "in": "path", "required": true, "description": "イメージの`key`", "schema": { "type": "string" } }
+            ],
+            "delete": {
+                "tags": ["content_images"],
+                "operationId": "unlinkContentImage",
+                "summary": "コンテンツとイメージの紐付けを外す（本人）",
+                "description": "イメージ（ファイル）は削除しません。紐付けがない場合は`404`。",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "$ref": "#/components/responses/Done" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
                     "502": { "$ref": "#/components/responses/BadGateway" }
                 }
             }
@@ -959,6 +1117,19 @@
                     "updated_at": { "$ref": "#/components/schemas/DateTime" }
                 }
             },
+            "Image": {
+                "type": "object",
+                "required": ["key", "source_name", "extension", "url", "site_key", "created_at", "updated_at"],
+                "properties": {
+                    "key": { "$ref": "#/components/schemas/Key" },
+                    "source_name": { "type": "string", "maxLength": 255, "description": "アップロード時のファイル名" },
+                    "extension": { "type": "string", "enum": ["jpg", "png", "gif", "webp"] },
+                    "url": { "type": "string", "description": "画像のパス（`/statics/images/<key>.<extension>`）" },
+                    "site_key": { "$ref": "#/components/schemas/Key" },
+                    "created_at": { "$ref": "#/components/schemas/DateTime" },
+                    "updated_at": { "$ref": "#/components/schemas/DateTime" }
+                }
+            },
             "ContentTag": {
                 "type": "object",
                 "required": ["key", "tag"],
@@ -1038,6 +1209,20 @@
                 "required": ["tag"],
                 "properties": {
                     "tag": { "type": "string", "maxLength": 255, "description": "先頭に`#`を付けない。同じサイトの中で一意" }
+                }
+            },
+            "ImageInput": {
+                "type": "object",
+                "required": ["image"],
+                "properties": {
+                    "image": { "type": "string", "format": "binary", "description": "JPEG / PNG / GIF / WebP（中身で判定）。5MB以内" }
+                }
+            },
+            "ContentImageInput": {
+                "type": "object",
+                "required": ["image"],
+                "properties": {
+                    "image": { "type": "string", "description": "コンテンツと同じサイトのイメージの`key`" }
                 }
             },
             "ContentInput": {
@@ -1196,6 +1381,32 @@
                             "allOf": [
                                 { "$ref": "#/components/schemas/Envelope" },
                                 { "properties": { "data": { "$ref": "#/components/schemas/Tag" } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "ImageList": {
+                "description": "イメージの配列（0件でも`200`）",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Image" } } } }
+                            ]
+                        }
+                    }
+                }
+            },
+            "ImageItem": {
+                "description": "イメージ",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "allOf": [
+                                { "$ref": "#/components/schemas/Envelope" },
+                                { "properties": { "data": { "$ref": "#/components/schemas/Image" } } }
                             ]
                         }
                     }

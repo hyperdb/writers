@@ -5,6 +5,8 @@ RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
 RewriteRule ^index\.php$ - [L]
+# 静的ファイル（アップロードした画像など）はそのまま返す
+RewriteRule ^statics/ - [L]
 
 RewriteCond %{REQUEST_URI} !^/\.well-known/
 RewriteRule ^ index.php [QSA,L]

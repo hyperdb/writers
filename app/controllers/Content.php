@@ -261,7 +261,7 @@ class Content extends Base implements SiteScopedMethod
             $this->resultJson([], 404, $this->route, "見つかりませんでした");
             return;
         }
-        if ($this->respondIfForbidden($this->canEdit($current)))
+        if ($this->respondIfForbidden($this->canEditContent($current)))
         {
             return;
         }
@@ -296,30 +296,13 @@ class Content extends Base implements SiteScopedMethod
             $this->resultJson([], 404, $this->route, "見つかりませんでした");
             return;
         }
-        if ($this->respondIfForbidden($this->canEdit($current)))
+        if ($this->respondIfForbidden($this->canEditContent($current)))
         {
             return;
         }
 
         ContentModel::delete($id);
         $this->resultJson([], 200, $this->route, "削除できました");
-    }
-
-    /**
-     * ログイン中のユーザーがコンテンツを更新・削除できるか
-     * 管理者は常に可、それ以外は本人のコンテンツで、かつサイトの執筆者である場合のみ
-     *
-     * @param array $content
-     * @return boolean
-     */
-    private function canEdit(array $content): bool
-    {
-        if ($this->isAdmin())
-        {
-            return true;
-        }
-        return intval($content["writer_id"]) === $this->loginWriterId()
-            && $this->isSiteWriter(intval($content["site_id"]));
     }
 
     /**

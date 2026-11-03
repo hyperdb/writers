@@ -26,5 +26,9 @@ data/*
 .phpunit.cache/
 *.withComment
 
+# アップロードされた画像（ディレクトリだけ残す）
+/statics/images/*
+!/statics/images/.gitkeep
+
 # 進捗メモ（Syncthingで同期・コミット対象外）
 .notes/

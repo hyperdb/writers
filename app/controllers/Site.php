@@ -175,7 +175,7 @@ class Site extends Base implements BaseMethod
                 [],
                 409,
                 $this->route,
-                "コンテンツ・カテゴリー・タグ・執筆者が紐付いているため削除できません"
+                "コンテンツ・カテゴリー・タグ・イメージ・執筆者が紐付いているため削除できません"
             );
             return;
         }

@@ -202,6 +202,7 @@ class SiteTest extends DbTestCase
             'コンテンツ' => ["INSERT INTO contents (title, site_id, writer_id) VALUES ('テスト', ?, 1)"],
             'カテゴリー' => ["INSERT INTO categories (category, site_id) VALUES ('テスト', ?)"],
             'タグ' => ["INSERT INTO tags (tag, site_id) VALUES ('テスト', ?)"],
+            'イメージ' => ["INSERT INTO images (site_id, source_name, extension) VALUES (?, 'test.png', 'png')"],
             'サイト執筆者' => ["INSERT INTO site_writers (site_id, writer_id) VALUES (?, 1)"],
         ];
     }

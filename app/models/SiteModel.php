@@ -100,8 +100,10 @@ class SiteModel
                 (SELECT COUNT(*) FROM contents WHERE site_id = ?)
               + (SELECT COUNT(*) FROM categories WHERE site_id = ?)
               + (SELECT COUNT(*) FROM tags WHERE site_id = ?)
+              + (SELECT COUNT(*) FROM images WHERE site_id = ?)
               + (SELECT COUNT(*) FROM site_writers WHERE site_id = ?)";
         return intval(BaseModel::fetchColumn($sql, [
+            $id,
             $id,
             $id,
             $id,
