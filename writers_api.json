@@ -6,9 +6,9 @@
         "summary": "複数サイトのコンテンツを管理するREST API",
         "description": "FlightPHP + MySQLで構築したコンテンツ管理サーバーのAPIです。\n\n- 仕様の正本は`/documents/api-conventions.md`と`/documents/api/*.md`です。このファイルは正本から作成した参照用で、食い違いがある場合は正本を優先します。\n- すべてのレスポンスは`Envelope`の形式で返却します（ルート未定義の`404`も同様）。\n- 連番のIDは返さず、文字列化した`key`を使います。他のリソースの参照も`<名前>_key`で返します（参照先なしは`null`）。\n- 読み取り（`GET`）は認証不要、書き込み（`POST` / `PUT` / `DELETE`）はBearerトークンが必須です。\n- 日時は`Y-m-d H:i:s`形式の文字列です。タイムゾーンは日本時間（JST）です。",
         "contact": {
-            "name": "",
-            "url": "",
-            "email": ""
+            "name": "hyperdb",
+            "url": "https://github.com/hyperdb/writers",
+            "email": "hyperdb@gmail.com"
         },
         "license": {
             "name": "MIT",
