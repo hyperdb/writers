@@ -311,6 +311,8 @@ class Image extends Base implements SiteScopedMethod
         {
             throw new RuntimeException("画像ファイルを保存できませんでした");
         }
+        // PUT の一時ファイルは 0600 のため、Web サーバーが配信できるようにする
+        chmod($path, 0644);
     }
 
     /**
